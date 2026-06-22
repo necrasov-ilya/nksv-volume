@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Просмотр</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="viewer" id="viewer">
+    <div class="viewer-content">
+      <p class="viewer-loading">Загрузка<span class="dots"></span></p>
+    </div>
+  </div>
+  <script>
+    (async () => {
+      const id = location.pathname.split('/').pop();
+      const viewer = document.getElementById('viewer');
+      const content = viewer.querySelector('.viewer-content');
+
+      try {
+        const res = await fetch('/api/meta/' + id);
+        if (!res.ok) {
+          content.innerHTML = `
+            <div class="viewer-error">
+              <span class="icon">📭</span>
+              Файл не найден
+            </div>`;
+          return;
+        }
+
+        const meta = await res.json();
+        const rawUrl = '/r/' + id;
+        let media = '';
+
+        if (meta.mimeType.startsWith('video/')) {
+          media = `<video controls autoplay preload="metadata"><source src="${rawUrl}" type="${meta.mimeType}"></video>`;
+        } else if (meta.mimeType.startsWith('image/')) {
+          media = `<img src="${rawUrl}" alt="">`;
+        } else if (meta.mimeType === 'application/pdf') {
+          media = `<iframe src="${rawUrl}"></iframe>`;
+        } else {
+          media = `<a href="${rawUrl}" style="color:var(--accent);font-size:1rem">Скачать файл</a>`;
+        }
+
+        content.innerHTML = `
+          ${media}
+          <div class="viewer-info">
+            <div class="viewer-filename">${escapeHtml(meta.originalName)}</div>
+            <div class="viewer-meta">${formatSize(meta.size)}</div>
+          </div>`;
+
+        document.title = meta.originalName;
+      } catch {
+        content.innerHTML = `
+          <div class="viewer-error">
+            <span class="icon">⚠️</span>
+            Ошибка загрузки
+          </div>`;
+      }
+
+      function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      }
+      function formatSize(b) {
+        if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+        if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+        return (b / 1073741824).toFixed(2) + ' GB';
+      }
+    })();
+  </script>
+</body>
+</html>

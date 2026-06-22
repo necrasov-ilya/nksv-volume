@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>nksv volume</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Landing — пустая сцена, ждёт контент -->
+  <div class="landing" id="landing">
+    <div class="landing-bg"></div>
+    <div class="landing-inner">
+      <div class="landing-stage">
+        <div class="landing-ring"></div>
+        <div class="landing-ring-2"></div>
+        <div class="landing-icon">✨</div>
+      </div>
+      <h1>Привет!</h1>
+      <p class="subtitle">Для тебя пока ничего нет</p>
+      <p class="landing-desc">
+        Сюда придёт видео или скриншот, когда кто-то поделится ссылкой.
+      </p>
+      <div class="landing-footer">
+        <span class="landing-dot" id="landing-dot"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth modal -->
+  <div class="auth-overlay" id="auth-overlay">
+    <div class="auth-box">
+      <h2>Вход</h2>
+      <input type="password" id="auth-input" placeholder="Пароль" autocomplete="off">
+      <div class="auth-error" id="auth-error">Неверный пароль</div>
+    </div>
+  </div>
+
+  <!-- Admin panel — инструмент владельца -->
+  <div class="admin" id="admin">
+    <div class="admin-header">
+      <div class="logo">nksv<span>·</span>volume</div>
+      <button id="btn-logout">Выйти</button>
+    </div>
+    <div class="admin-body">
+      <div class="upload-progress">
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+
+      <div class="toolbar">
+        <div class="breadcrumbs" id="breadcrumbs"></div>
+        <button id="btn-new-folder" class="btn-sm">+ Папка</button>
+      </div>
+
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-icon">📁</div>
+        <p>Перетащи файлы или нажми для загрузки</p>
+        <p class="hint">MP4, WebM, MKV, PNG, JPG, WebP, GIF, PDF · до 500 MB</p>
+        <input type="file" id="file-input" multiple hidden>
+      </div>
+
+      <div class="folder-grid" id="folder-grid"></div>
+      <div class="file-list" id="file-list"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
