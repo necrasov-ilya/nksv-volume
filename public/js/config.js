@@ -1,15 +1,3 @@
-export function getToken() {
-  return localStorage.getItem('nksv_token');
-}
-
-export function setToken(token) {
-  localStorage.setItem('nksv_token', token);
-}
-
-export function clearToken() {
-  localStorage.removeItem('nksv_token');
-}
-
 export function getFolderId() {
   return sessionStorage.getItem('nksv_folder') || null;
 }
@@ -19,33 +7,50 @@ export function setFolderId(id) {
   else sessionStorage.removeItem('nksv_folder');
 }
 
-export function showToast(msg) {
-  const t = document.getElementById('toast');
-  if (!t) return;
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(t._timer);
-  t._timer = setTimeout(() => t.classList.remove('show'), 2500);
+export function showToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 2600);
 }
 
-export function escapeHtml(s) {
+export function escapeHtml(value = '') {
   const div = document.createElement('div');
-  div.textContent = s;
+  div.textContent = String(value);
   return div.innerHTML;
 }
 
-export function formatSize(bytes) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
-  return (bytes / 1073741824).toFixed(2) + ' GB';
+export function formatSize(bytes = 0) {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1).replace('.', ',')} КБ`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1).replace('.', ',')} МБ`;
+  return `${(bytes / 1024 ** 3).toFixed(2).replace('.', ',')} ГБ`;
 }
 
 export function formatDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('ru-RU') + ' ' +
-    d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const date = new Date(iso);
+  const today = new Date();
+  const isToday = date.toDateString() === today.toDateString();
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (isToday) return `сегодня, ${time}`;
+  return `${date.toLocaleDateString('ru-RU')} · ${time}`;
 }
 
-export function isImage(mime) { return mime?.startsWith('image/'); }
-export function isVideo(mime) { return mime?.startsWith('video/'); }
+export function isImage(mime = '') { return mime.startsWith('image/'); }
+export function isVideo(mime = '') { return mime.startsWith('video/'); }
+export function isPdf(mime = '') { return mime === 'application/pdf'; }
+
+export function fileIcon(mime = '') {
+  if (isVideo(mime)) return 'ti-video';
+  if (isImage(mime)) return 'ti-photo';
+  if (isPdf(mime)) return 'ti-file-type-pdf';
+  return 'ti-file';
+}
+
+export function extensionLabel(item) {
+  if (item.type === 'folder') return 'Папка';
+  const name = item.originalName || '';
+  return name.includes('.') ? name.split('.').pop().toUpperCase() : 'Файл';
+}

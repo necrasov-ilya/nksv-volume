@@ -9,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@tabler/icons-webfont": "^3.44.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "multer": "^2.0.1",

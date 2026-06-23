@@ -1,5 +1,6 @@
 import fs from 'fs';
 import { config } from '../config.js';
+import { normalizeFilename } from './filename.js';
 
 fs.mkdirSync(config.paths.uploads, { recursive: true });
 fs.mkdirSync(config.paths.data, { recursive: true });
@@ -7,7 +8,18 @@ if (!fs.existsSync(config.paths.metaFile)) fs.writeFileSync(config.paths.metaFil
 
 export function loadMeta() {
   try {
-    return JSON.parse(fs.readFileSync(config.paths.metaFile, 'utf-8'));
+    const data = JSON.parse(fs.readFileSync(config.paths.metaFile, 'utf-8'));
+    let changed = false;
+    for (const entry of data) {
+      if (!entry.originalName) continue;
+      const normalized = normalizeFilename(entry.originalName);
+      if (normalized !== entry.originalName) {
+        entry.originalName = normalized;
+        changed = true;
+      }
+    }
+    if (changed) fs.writeFileSync(config.paths.metaFile, JSON.stringify(data, null, 2));
+    return data;
   } catch {
     return [];
   }

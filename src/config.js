@@ -6,11 +6,25 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
+const adminPassword = process.env.ADMIN_PASSWORD?.trim();
+
+if (!adminPassword) {
+  throw new Error('ADMIN_PASSWORD is required. Copy .env.example to .env and set a strong password.');
+}
+if (adminPassword.length < 12) {
+  throw new Error('ADMIN_PASSWORD must contain at least 12 characters.');
+}
+
+const requestedMaxFileSize = parseInt(process.env.MAX_FILE_SIZE || '200', 10);
+const requestedMaxStorageGb = parseFloat(process.env.MAX_STORAGE_GB || '20');
 
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
-  adminPassword: process.env.ADMIN_PASSWORD || 'changeme',
-  maxFileSizeMb: parseInt(process.env.MAX_FILE_SIZE || '500', 10),
+  adminPassword,
+  isProduction: process.env.NODE_ENV === 'production',
+  trustProxy: process.env.TRUST_PROXY === '1' ? 1 : false,
+  maxFileSizeMb: Math.max(1, Math.min(Number.isFinite(requestedMaxFileSize) ? requestedMaxFileSize : 200, 200)),
+  maxStorageGb: Math.max(0.01, Math.min(Number.isFinite(requestedMaxStorageGb) ? requestedMaxStorageGb : 20, 20)),
   maxFilesPerUpload: 20,
   paths: {
     root,

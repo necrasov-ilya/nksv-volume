@@ -1,16 +1,82 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { config } from '../config.js';
-import { createToken } from '../utils/tokenStore.js';
+import { authMiddleware, getSessionToken } from '../middleware/auth.js';
+import { createToken, revokeToken, sessionTtlSeconds } from '../utils/tokenStore.js';
 
 const router = Router();
+const attempts = new Map();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000;
+const BLOCK_MS = 15 * 60 * 1000;
+const passwordSalt = crypto.randomBytes(16);
+const expectedPassword = crypto.scryptSync(config.adminPassword, passwordSalt, 64);
+
+function verifyPassword(value) {
+  const candidate = crypto.scryptSync(String(value || ''), passwordSalt, 64);
+  return crypto.timingSafeEqual(candidate, expectedPassword);
+}
+
+function clientKey(req) {
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
+
+function getAttemptState(key) {
+  const now = Date.now();
+  const current = attempts.get(key);
+  if (!current || now - current.windowStartedAt > WINDOW_MS) {
+    const fresh = { count: 0, windowStartedAt: now, blockedUntil: 0 };
+    attempts.set(key, fresh);
+    return fresh;
+  }
+  return current;
+}
+
+function sessionCookie(token, maxAge = sessionTtlSeconds) {
+  const parts = [
+    `nksv_session=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Strict',
+    `Max-Age=${maxAge}`,
+  ];
+  if (config.isProduction) parts.push('Secure');
+  return parts.join('; ');
+}
 
 router.post('/auth', (req, res) => {
-  const { password } = req.body;
-  if (password === config.adminPassword) {
-    res.json({ token: createToken() });
-  } else {
-    res.status(403).json({ error: 'Wrong password' });
+  const key = clientKey(req);
+  const state = getAttemptState(key);
+  const now = Date.now();
+
+  if (state.blockedUntil > now) {
+    const retryAfter = Math.ceil((state.blockedUntil - now) / 1000);
+    res.setHeader('Retry-After', retryAfter);
+    return res.status(429).json({ error: 'Слишком много попыток. Попробуйте позже.' });
   }
+
+  const { password } = req.body;
+  if (verifyPassword(password)) {
+    attempts.delete(key);
+    const token = createToken();
+    res.setHeader('Set-Cookie', sessionCookie(token));
+    return res.json({ ok: true });
+  }
+
+  state.count += 1;
+  if (state.count >= MAX_ATTEMPTS) state.blockedUntil = now + BLOCK_MS;
+  attempts.set(key, state);
+  return res.status(401).json({ error: 'Неверный пароль' });
+});
+
+router.get('/auth/session', authMiddleware, (_req, res) => {
+  res.json({ ok: true });
+});
+
+router.post('/auth/logout', authMiddleware, (req, res) => {
+  revokeToken(getSessionToken(req));
+  res.setHeader('Set-Cookie', sessionCookie('', 0));
+  res.json({ ok: true });
 });
 
 export default router;

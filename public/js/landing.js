@@ -1,94 +1,89 @@
-import { getToken, setToken, clearToken, showToast } from './config.js';
 import { api } from './api.js';
+import { setFolderId, showToast } from './config.js';
 
-const TRIPLE_CLICK_DELAY = 600;
-let clickCount = 0;
-let clickTimer = null;
+let onAuthSuccess = null;
+let secretClicks = 0;
+let secretTimer = null;
 
-export function initLanding(onAuthSuccess) {
-  const dot = document.getElementById('landing-dot');
-  if (dot) {
-    dot.addEventListener('click', () => {
-      clickCount++;
-      clearTimeout(clickTimer);
-      clickTimer = setTimeout(() => { clickCount = 0; }, TRIPLE_CLICK_DELAY);
-      if (clickCount >= 3) {
-        clickCount = 0;
-        openAuth(onAuthSuccess);
-      }
-    });
-  }
-
-  const savedToken = getToken();
-  if (savedToken) {
-    validateSession(onAuthSuccess);
-  }
-}
-
-async function validateSession(onAuthSuccess) {
-  try {
-    await api.listFiles(null);
-    onAuthSuccess();
-  } catch {
-    clearToken();
-  }
-}
-
-function openAuth(onAuthSuccess) {
+function openAuth() {
   const overlay = document.getElementById('auth-overlay');
-  overlay.classList.add('active');
   const input = document.getElementById('auth-input');
-  input.value = '';
-  input.focus();
-
-  const errorEl = document.getElementById('auth-error');
-  errorEl.classList.remove('active');
-
-  const handleKey = async (e) => {
-    if (e.key === 'Enter') {
-      const password = input.value;
-      try {
-        const res = await api.auth(password);
-        if (res.ok) {
-          const data = await res.json();
-          setToken(data.token);
-          closeAuth();
-          input.removeEventListener('keydown', handleKey);
-          onAuthSuccess();
-        } else {
-          showError(errorEl);
-        }
-      } catch {
-        showError(errorEl);
-      }
-    } else if (e.key === 'Escape') {
-      closeAuth();
-      input.removeEventListener('keydown', handleKey);
-    }
-  };
-
-  input.addEventListener('keydown', handleKey);
-
-  overlay.onclick = (e) => {
-    if (e.target === overlay) {
-      closeAuth();
-      input.removeEventListener('keydown', handleKey);
-    }
-  };
-}
-
-function showError(el) {
-  el.classList.add('active');
-  setTimeout(() => el.classList.remove('active'), 2000);
+  document.getElementById('auth-error').textContent = '';
+  overlay.hidden = false;
+  requestAnimationFrame(() => input.focus());
 }
 
 function closeAuth() {
-  document.getElementById('auth-overlay').classList.remove('active');
+  const overlay = document.getElementById('auth-overlay');
+  overlay.hidden = true;
+  document.getElementById('auth-form').reset();
+  document.getElementById('auth-error').textContent = '';
 }
 
-export function logout() {
-  clearToken();
-  document.getElementById('admin').classList.remove('active');
-  document.getElementById('landing').style.display = 'flex';
+function showLanding() {
+  document.getElementById('admin').hidden = true;
+  document.getElementById('landing').hidden = false;
+}
+
+async function submitAuth(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const input = document.getElementById('auth-input');
+  const error = document.getElementById('auth-error');
+  const submit = form.querySelector('button[type="submit"]');
+  error.textContent = '';
+  submit.disabled = true;
+
+  try {
+    await api.auth(input.value);
+    closeAuth();
+    onAuthSuccess?.();
+  } catch (requestError) {
+    error.textContent = requestError.message;
+    input.select();
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+export function initLanding(successCallback) {
+  onAuthSuccess = successCallback;
+  const overlay = document.getElementById('auth-overlay');
+
+  document.getElementById('landing-secret').addEventListener('click', () => {
+    secretClicks += 1;
+    clearTimeout(secretTimer);
+    secretTimer = setTimeout(() => { secretClicks = 0; }, 1200);
+    if (secretClicks >= 5) {
+      secretClicks = 0;
+      openAuth();
+    }
+  });
+  document.getElementById('auth-close').addEventListener('click', closeAuth);
+  document.getElementById('auth-form').addEventListener('submit', submitAuth);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) closeAuth();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !overlay.hidden) closeAuth();
+    if (event.ctrlKey && event.shiftKey && event.code === 'Period') {
+      event.preventDefault();
+      openAuth();
+    }
+  });
+
+  window.addEventListener('session-expired', () => {
+    setFolderId(null);
+    showLanding();
+    showToast('Сессия завершилась. Войдите снова.');
+  });
+
+  api.session().then(successCallback).catch(() => showLanding());
+}
+
+export async function logout() {
+  try { await api.logout(); } catch { /* The local session is already unusable. */ }
+  setFolderId(null);
+  showLanding();
   showToast('Вы вышли');
 }

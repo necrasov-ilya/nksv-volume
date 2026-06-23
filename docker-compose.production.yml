@@ -1,0 +1,45 @@
+services:
+  volume:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nksv-volume
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    expose:
+      - "3000"
+    volumes:
+      - volume-data:/app/data
+      - volume-uploads:/app/uploads
+    networks:
+      - remnawave-network
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/api/config"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  volume-data:
+  volume-uploads:
+
+networks:
+  remnawave-network:
+    external: true

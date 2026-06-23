@@ -1,161 +1,340 @@
 import { api } from './api.js';
 import {
-  getFolderId, setFolderId, showToast, escapeHtml,
-  formatSize, formatDate, isImage, isVideo,
+  escapeHtml, extensionLabel, fileIcon, formatDate, formatSize,
+  getFolderId, isImage, isPdf, isVideo, setFolderId, showToast,
 } from './config.js';
 
-let onNavigate = null;
+let navigateCallback = null;
+let currentItems = new Map();
+let selectedId = null;
+let movingItem = null;
 
-export function initFileList(navigateCallback) {
-  onNavigate = navigateCallback;
+function itemCountLabel(count = 0) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} объект`;
+  if ([2, 3, 4].includes(mod10) && ![12, 13, 14].includes(mod100)) return `${count} объекта`;
+  return `${count} объектов`;
 }
 
-export async function loadFiles() {
-  const folderId = getFolderId();
-  const container = document.getElementById('file-list');
+function shareUrl(id) {
+  return `${location.origin}/v/${id}`;
+}
 
+async function copyText(value, button) {
   try {
-    const data = await api.listFiles(folderId);
-    renderBreadcrumbs(data.breadcrumbs);
-    renderFolders(data.folders);
-    renderFiles(data.files);
+    await navigator.clipboard.writeText(value);
+    button?.classList.add('copied');
+    const icon = button?.querySelector('.ti');
+    const originalHtml = button?.innerHTML;
+    if (button?.id === 'detail-copy') {
+      button.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>Скопировано';
+    } else if (icon) {
+      icon.className = 'ti ti-check';
+    } else if (button) {
+      button.textContent = 'Скопировано';
+    }
+    setTimeout(() => {
+      if (button && originalHtml) button.innerHTML = originalHtml;
+      button?.classList.remove('copied');
+    }, 1600);
+    showToast('Ссылка скопирована');
   } catch {
-    container.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:2rem">Failed to load</p>';
+    window.prompt('Скопируйте ссылку:', value);
   }
 }
 
 function renderBreadcrumbs(crumbs) {
-  const el = document.getElementById('breadcrumbs');
-  if (!crumbs.length) {
-    el.innerHTML = '';
-    el.style.display = 'none';
-    return;
+  const breadcrumbs = document.getElementById('breadcrumbs');
+  const parentId = crumbs.length > 1 ? crumbs[crumbs.length - 2].id : '';
+  const parts = [];
+  if (crumbs.length) {
+    parts.push(`
+      <button class="crumb-up" type="button" data-folder-id="${escapeHtml(parentId)}" aria-label="На уровень выше">
+        <i class="ti ti-arrow-left" aria-hidden="true"></i>
+        Назад
+      </button>`);
   }
-  el.style.display = 'flex';
-
-  let html = `<button class="crumb" onclick="window.__nksv.navigate(null)">Root</button>`;
-  for (const c of crumbs) {
-    html += `<span class="crumb-sep">/</span>`;
-    html += `<button class="crumb" onclick="window.__nksv.navigate('${c.id}')">${escapeHtml(c.name)}</button>`;
-  }
-  el.innerHTML = html;
+  parts.push(`<button class="crumb" type="button" data-folder-id="">Все файлы</button>`);
+  crumbs.forEach((crumb) => {
+    parts.push('<span class="crumb-separator" aria-hidden="true">/</span>');
+    parts.push(`<button class="crumb" type="button" data-folder-id="${escapeHtml(crumb.id)}">${escapeHtml(crumb.name)}</button>`);
+  });
+  breadcrumbs.innerHTML = parts.join('');
+  const buttons = breadcrumbs.querySelectorAll('.crumb');
+  buttons[buttons.length - 1]?.setAttribute('aria-current', 'page');
 }
 
-function renderFolders(folders) {
-  const container = document.getElementById('folder-grid');
-  if (!folders.length) {
-    container.innerHTML = '';
-    container.style.display = 'none';
+function visualFor(item) {
+  if (item.type === 'folder') {
+    return '<div class="item-visual"><i class="ti ti-folder" aria-hidden="true"></i></div>';
+  }
+  if (isImage(item.mimeType)) {
+    return `<div class="item-visual media"><img src="/r/${escapeHtml(item.id)}" alt="" loading="lazy"></div>`;
+  }
+  if (isVideo(item.mimeType)) {
+    return `<div class="item-visual media"><video src="/r/${escapeHtml(item.id)}#t=0.1" muted preload="metadata" aria-hidden="true"></video></div>`;
+  }
+  return `<div class="item-visual"><i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i></div>`;
+}
+
+function menuFor(item) {
+  const openLabel = item.type === 'folder' ? 'Открыть папку' : 'Открыть файл';
+  const move = item.type === 'folder'
+    ? ''
+    : `<button type="button" data-action="move"><i class="ti ti-folder-symlink" aria-hidden="true"></i>Переместить</button>`;
+  const renameFile = item.type === 'folder'
+    ? ''
+    : `<button type="button" data-action="rename-file"><i class="ti ti-pencil" aria-hidden="true"></i>Переименовать</button>`;
+  const rename = item.type === 'folder'
+    ? `<button type="button" data-action="rename"><i class="ti ti-pencil" aria-hidden="true"></i>Переименовать</button>`
+    : '';
+  return `
+    <details class="row-menu">
+      <summary class="row-action" aria-label="Другие действия"><i class="ti ti-dots-vertical" aria-hidden="true"></i></summary>
+      <div class="row-menu-popover">
+        <button type="button" data-action="open"><i class="ti ti-external-link" aria-hidden="true"></i>${openLabel}</button>
+        ${move}
+        ${renameFile}
+        ${rename}
+        <button class="danger" type="button" data-action="delete"><i class="ti ti-trash" aria-hidden="true"></i>Удалить</button>
+      </div>
+    </details>`;
+}
+
+async function openMoveDialog(item) {
+  try {
+    const data = await api.listFolders();
+    movingItem = item;
+    document.getElementById('move-file-name').textContent = item.originalName;
+    const select = document.getElementById('move-target');
+    select.innerHTML = [
+      '<option value="">Все файлы</option>',
+      ...data.folders.map((folder) =>
+        `<option value="${escapeHtml(folder.id)}">${escapeHtml(folder.path)}</option>`),
+    ].join('');
+    select.value = item.folderId || '';
+    document.getElementById('move-dialog').showModal();
+    requestAnimationFrame(() => select.focus());
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function closeMoveDialog() {
+  document.getElementById('move-dialog').close();
+  movingItem = null;
+}
+
+async function submitMove(event) {
+  event.preventDefault();
+  if (!movingItem) return;
+  const targetFolderId = document.getElementById('move-target').value || null;
+  if ((movingItem.folderId || null) === targetFolderId) {
+    closeMoveDialog();
+    showToast('Файл уже находится в этой папке');
     return;
   }
-  container.style.display = 'grid';
 
-  container.innerHTML = folders.map((f) => `
-    <div class="folder-card" ondblclick="window.__nksv.navigate('${f.id}')">
-      <div class="folder-icon">📁</div>
-      <div class="folder-name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</div>
-      <div class="folder-actions">
-        <button class="btn-sm" onclick="event.stopPropagation();window.__nksv.renameFolder('${f.id}','${escapeHtml(f.name)}')">Rename</button>
-        <button class="btn-sm danger" onclick="event.stopPropagation();window.__nksv.deleteFolder('${f.id}','${escapeHtml(f.name)}')">Delete</button>
+  const submit = event.currentTarget.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    await api.moveFile(movingItem.id, targetFolderId);
+    closeMoveDialog();
+    selectedId = null;
+    showToast('Файл перемещён');
+    await loadFiles();
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+function renderRows(folders, files) {
+  const list = document.getElementById('file-list');
+  const items = [...folders, ...files];
+  currentItems = new Map(items.map((item) => [item.id, item]));
+
+  if (!items.length) {
+    selectedId = null;
+    renderDetail(null);
+    list.innerHTML = `
+      <div class="empty-list">
+        <i class="ti ti-folder-open" aria-hidden="true"></i>
+        Здесь пока пусто
+      </div>`;
+    return;
+  }
+
+  if (!currentItems.has(selectedId)) {
+    selectedId = files[0]?.id || folders[0]?.id || null;
+  }
+
+  list.innerHTML = items.map((item) => {
+    const isFolder = item.type === 'folder';
+    const name = isFolder ? item.name : item.originalName;
+    const meta = isFolder
+      ? itemCountLabel(item.itemCount)
+      : `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
+    return `
+      <article class="file-row${item.id === selectedId ? ' selected' : ''}" data-id="${escapeHtml(item.id)}" data-type="${item.type}">
+        ${visualFor(item)}
+        <div class="item-copy">
+          ${isFolder
+            ? `<button class="item-name" type="button" data-action="navigate">${escapeHtml(name)}</button>`
+            : `<button class="item-name" type="button" data-action="select">${escapeHtml(name)}</button>`}
+          <p class="item-meta">${escapeHtml(meta)}</p>
+        </div>
+        <button class="row-action" type="button" data-action="copy" aria-label="Скопировать публичную ссылку">
+          <i class="ti ti-copy" aria-hidden="true"></i>
+        </button>
+        ${menuFor(item)}
+      </article>`;
+  }).join('');
+
+  renderDetail(currentItems.get(selectedId));
+}
+
+function previewFor(item) {
+  if (item.type === 'folder') return '<i class="ti ti-folder" aria-hidden="true"></i>';
+  const raw = `/r/${encodeURIComponent(item.id)}`;
+  if (isImage(item.mimeType)) return `<img src="${raw}" alt="${escapeHtml(item.originalName)}">`;
+  if (isVideo(item.mimeType)) return `<video src="${raw}" controls preload="metadata"></video>`;
+  if (isPdf(item.mimeType)) return `<iframe src="${raw}" title="${escapeHtml(item.originalName)}"></iframe>`;
+  return `<i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i>`;
+}
+
+function renderDetail(item) {
+  const panel = document.getElementById('detail-panel');
+  if (!item) {
+    panel.innerHTML = `
+      <div class="detail-empty">
+        <i class="ti ti-file" aria-hidden="true"></i>
+        <p>Выберите файл, чтобы посмотреть его и скопировать ссылку.</p>
+      </div>`;
+    return;
+  }
+
+  const isFolder = item.type === 'folder';
+  const name = isFolder ? item.name : item.originalName;
+  const meta = isFolder
+    ? itemCountLabel(item.itemCount)
+    : `${formatSize(item.size)} · ${extensionLabel(item)}`;
+  const url = shareUrl(item.id);
+  panel.innerHTML = `
+    <h2 class="detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</h2>
+    <div class="detail-preview">${previewFor(item)}</div>
+    <p class="detail-meta">${escapeHtml(meta)}</p>
+    <div class="share-block">
+      <label class="share-label" for="detail-share-url">Публичная ссылка</label>
+      <div class="share-control">
+        <input id="detail-share-url" value="${escapeHtml(url)}" readonly>
       </div>
     </div>
-  `).join('');
+    <div class="detail-actions">
+      <button class="primary-button" id="detail-copy" type="button">
+        <i class="ti ti-copy" aria-hidden="true"></i>
+        Скопировать ссылку
+      </button>
+      <a class="detail-open" href="/v/${encodeURIComponent(item.id)}" target="_blank" rel="noopener">
+        <i class="ti ti-external-link" aria-hidden="true"></i>
+        Открыть
+      </a>
+    </div>`;
 
-  container.querySelectorAll('.folder-card').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.folder-actions')) return;
-      const id = card.querySelector('[onclick]').getAttribute('onclick').match(/'([^']+)'/)[1];
-      window.__nksv.navigate(id);
-    });
-  });
+  document.getElementById('detail-copy').addEventListener('click', (event) => copyText(url, event.currentTarget));
+  document.getElementById('detail-share-url').addEventListener('click', (event) => event.currentTarget.select());
 }
 
-function renderFiles(files) {
-  const container = document.getElementById('file-list');
+function selectItem(id) {
+  if (!currentItems.has(id)) return;
+  selectedId = id;
+  document.querySelectorAll('.file-row').forEach((row) => {
+    row.classList.toggle('selected', row.dataset.id === id);
+  });
+  renderDetail(currentItems.get(id));
+}
 
-  if (!files.length) {
-    if (!document.getElementById('folder-grid').innerHTML) {
-      container.innerHTML = '<p style="color:var(--text-dim);text-align:center;padding:2rem">Empty folder</p>';
-    } else {
-      container.innerHTML = '';
-    }
+async function handleListClick(event) {
+  const row = event.target.closest('.file-row');
+  if (!row) return;
+  const item = currentItems.get(row.dataset.id);
+  if (!item) return;
+  const action = event.target.closest('[data-action]')?.dataset.action;
+
+  if (!action) {
+    selectItem(item.id);
     return;
   }
 
-  container.innerHTML = files.map((f) => {
-    let thumb;
-    if (isImage(f.mimeType)) {
-      thumb = `<img class="file-thumb" src="/r/${f.id}" alt="">`;
-    } else if (isVideo(f.mimeType)) {
-      thumb = `<div class="file-thumb placeholder">▶</div>`;
-    } else {
-      thumb = `<div class="file-thumb placeholder">📄</div>`;
-    }
-
-    return `
-      <div class="file-item">
-        ${thumb}
-        <div class="file-info">
-          <div class="file-name">${escapeHtml(f.originalName)}</div>
-          <div class="file-meta">${formatSize(f.size)} · ${formatDate(f.uploadedAt)}</div>
-        </div>
-        <div class="file-actions">
-          <button class="btn-sm" onclick="window.__nksv.copyLink('${f.id}', this)">Copy link</button>
-          <button class="btn-sm" onclick="window.open('/v/${f.id}','_blank')">Open</button>
-          <button class="btn-sm danger" onclick="window.__nksv.deleteFile('${f.id}')">Delete</button>
-        </div>
-      </div>
-    `;
-  }).join('');
+  if (action === 'select') selectItem(item.id);
+  if (action === 'navigate') navigateCallback?.(item.id);
+  if (action === 'copy') await copyText(shareUrl(item.id), event.target.closest('button'));
+  if (action === 'move') await openMoveDialog(item);
+  if (action === 'rename-file') {
+    const name = window.prompt('Новое имя файла:', item.originalName);
+    if (!name?.trim() || name.trim() === item.originalName) return;
+    try {
+      await api.renameFile(item.id, name.trim());
+      selectedId = item.id;
+      showToast('Файл переименован');
+      await loadFiles(item.id);
+    } catch (error) { showToast(error.message); }
+  }
+  if (action === 'open') {
+    if (item.type === 'folder') navigateCallback?.(item.id);
+    else window.open(`/v/${encodeURIComponent(item.id)}`, '_blank', 'noopener');
+  }
+  if (action === 'rename') {
+    const name = window.prompt('Новое название папки:', item.name);
+    if (!name?.trim() || name.trim() === item.name) return;
+    try {
+      await api.renameFolder(item.id, name.trim());
+      await loadFiles(item.id);
+    } catch (error) { showToast(error.message); }
+  }
+  if (action === 'delete') {
+    const label = item.type === 'folder'
+      ? `Удалить папку «${item.name}» вместе с содержимым?`
+      : `Удалить файл «${item.originalName}»?`;
+    if (!window.confirm(label)) return;
+    try {
+      if (item.type === 'folder') await api.deleteFolder(item.id);
+      else await api.deleteFile(item.id);
+      if (selectedId === item.id) selectedId = null;
+      showToast('Удалено');
+      await loadFiles();
+    } catch (error) { showToast(error.message); }
+  }
 }
 
-window.__nksv = {
-  navigate(folderId) {
-    setFolderId(folderId);
-    loadFiles();
-  },
+export function initFileList(onNavigate) {
+  navigateCallback = onNavigate;
+  document.getElementById('file-list').addEventListener('click', handleListClick);
+  document.getElementById('breadcrumbs').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-folder-id]');
+    if (button) navigateCallback?.(button.dataset.folderId || null);
+  });
+  document.getElementById('move-form').addEventListener('submit', submitMove);
+  document.getElementById('move-cancel').addEventListener('click', closeMoveDialog);
+  document.getElementById('move-dialog-close').addEventListener('click', closeMoveDialog);
+}
 
-  async copyLink(id, btn) {
-    const url = location.origin + '/v/' + id;
-    try {
-      await navigator.clipboard.writeText(url);
-      btn.textContent = 'Copied!';
-      btn.classList.add('copied');
-      setTimeout(() => {
-        btn.textContent = 'Copy link';
-        btn.classList.remove('copied');
-      }, 1500);
-    } catch {
-      window.prompt('Copy this:', url);
+export async function loadFiles(preferredId = null) {
+  const list = document.getElementById('file-list');
+  if (preferredId) selectedId = preferredId;
+  try {
+    const data = await api.listFiles(getFolderId());
+    renderBreadcrumbs(data.breadcrumbs);
+    if (data.storage) {
+      document.getElementById('storage-usage').textContent =
+        `${formatSize(data.storage.usedBytes)} из ${formatSize(data.storage.limitBytes)}`;
     }
-  },
-
-  async deleteFile(id) {
-    if (!confirm('Delete this file?')) return;
-    const ok = await api.deleteFile(id);
-    if (ok) { showToast('Deleted'); loadFiles(); }
-    else showToast('Delete failed');
-  },
-
-  async deleteFolder(id, name) {
-    if (!confirm(`Delete folder "${name}" and all contents?`)) return;
-    try {
-      await api.deleteFolder(id);
-      showToast('Folder deleted');
-      loadFiles();
-    } catch {
-      showToast('Delete failed');
-    }
-  },
-
-  async renameFolder(id, currentName) {
-    const name = prompt('New folder name:', currentName);
-    if (!name?.trim()) return;
-    try {
-      await api.renameFolder(id, name.trim());
-      loadFiles();
-    } catch {
-      showToast('Rename failed');
-    }
-  },
-};
+    document.getElementById('list-label').textContent = data.breadcrumbs.at(-1)?.name || 'Сегодня';
+    renderRows(data.folders, data.files);
+  } catch (error) {
+    if (error.status === 401) return;
+    list.innerHTML = `<div class="empty-list"><i class="ti ti-alert-circle" aria-hidden="true"></i>${escapeHtml(error.message)}</div>`;
+  }
+}

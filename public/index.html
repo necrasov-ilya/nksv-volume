@@ -3,68 +3,138 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>nksv volume</title>
+  <meta name="color-scheme" content="light">
+  <title>volume</title>
+  <link rel="stylesheet" href="/vendor/tabler/tabler-icons.min.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <!-- Landing — пустая сцена, ждёт контент -->
-  <div class="landing" id="landing">
-    <div class="landing-bg"></div>
-    <div class="landing-inner">
-      <div class="landing-stage">
-        <div class="landing-ring"></div>
-        <div class="landing-ring-2"></div>
-        <div class="landing-icon">✨</div>
-      </div>
+  <section class="landing" id="landing">
+    <main class="landing-content">
+      <button class="landing-secret" id="landing-secret" type="button" aria-label="Статус">
+        <i class="ti ti-inbox landing-icon" aria-hidden="true"></i>
+      </button>
       <h1>Привет!</h1>
-      <p class="subtitle">Для тебя пока ничего нет</p>
-      <p class="landing-desc">
-        Сюда придёт видео или скриншот, когда кто-то поделится ссылкой.
-      </p>
-      <div class="landing-footer">
-        <span class="landing-dot" id="landing-dot"></span>
-      </div>
-    </div>
+      <p class="landing-lead">Тебе пока ничего не отправили.</p>
+    </main>
+  </section>
+
+  <div class="auth-overlay" id="auth-overlay" hidden>
+    <section class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button class="icon-button auth-close" id="auth-close" type="button" aria-label="Закрыть">
+        <i class="ti ti-x" aria-hidden="true"></i>
+      </button>
+      <p class="eyebrow">Для владельца</p>
+      <h2 id="auth-title">Войти в volume</h2>
+      <p class="auth-note">Управление файлами доступно только владельцу.</p>
+      <form id="auth-form">
+        <label for="auth-input">Пароль</label>
+        <input type="password" id="auth-input" name="password" autocomplete="current-password" required>
+        <p class="form-error" id="auth-error" role="alert" aria-live="polite"></p>
+        <button class="primary-button auth-submit" type="submit">Войти</button>
+      </form>
+    </section>
   </div>
 
-  <!-- Auth modal -->
-  <div class="auth-overlay" id="auth-overlay">
-    <div class="auth-box">
-      <h2>Вход</h2>
-      <input type="password" id="auth-input" placeholder="Пароль" autocomplete="off">
-      <div class="auth-error" id="auth-error">Неверный пароль</div>
+  <section class="admin" id="admin" hidden>
+    <button class="admin-logout" id="btn-logout" type="button">Выйти</button>
+
+    <div class="app-shell">
+      <main class="workspace">
+        <div class="workspace-heading">
+          <div class="workspace-title-row">
+            <h1>Файлы</h1>
+            <p class="storage-usage" id="storage-usage">— из 20 ГБ</p>
+          </div>
+          <nav class="breadcrumbs" id="breadcrumbs" aria-label="Навигация по папкам"></nav>
+        </div>
+
+        <div class="toolbar" aria-label="Действия с файлами">
+          <button class="primary-button" id="btn-upload" type="button">
+            <i class="ti ti-upload" aria-hidden="true"></i>
+            Загрузить
+          </button>
+          <button class="quiet-button" id="btn-paste" type="button">
+            <i class="ti ti-clipboard" aria-hidden="true"></i>
+            Вставить из буфера
+          </button>
+          <button class="quiet-button" id="btn-new-folder" type="button">
+            <i class="ti ti-folder-plus" aria-hidden="true"></i>
+            Новая папка
+          </button>
+          <input type="file" id="file-input" multiple hidden>
+        </div>
+
+        <section class="dropzone" id="dropzone" tabindex="0" aria-label="Область загрузки файлов">
+          <i class="ti ti-upload" aria-hidden="true"></i>
+          <div>
+            <p>Перетащите файлы сюда или нажмите «Загрузить»</p>
+            <p class="dropzone-hint" id="upload-limits">PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до 200 МБ</p>
+          </div>
+        </section>
+
+        <div class="upload-progress" id="upload-progress" hidden>
+          <div class="progress-copy">
+            <span id="progress-label">Загрузка…</span>
+            <span id="progress-value">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+
+        <section class="file-browser" aria-live="polite">
+          <p class="list-label" id="list-label">Сегодня</p>
+          <div class="file-list" id="file-list"></div>
+        </section>
+      </main>
+
+      <aside class="detail-panel" id="detail-panel" aria-live="polite">
+        <div class="detail-empty">
+          <i class="ti ti-file" aria-hidden="true"></i>
+          <p>Выберите файл, чтобы посмотреть его и скопировать ссылку.</p>
+        </div>
+      </aside>
     </div>
-  </div>
+  </section>
 
-  <!-- Admin panel — инструмент владельца -->
-  <div class="admin" id="admin">
-    <div class="admin-header">
-      <div class="logo">nksv<span>·</span>volume</div>
-      <button id="btn-logout">Выйти</button>
-    </div>
-    <div class="admin-body">
-      <div class="upload-progress">
-        <div class="progress-bar"><div class="progress-fill"></div></div>
+  <dialog class="folder-dialog" id="folder-dialog">
+    <form id="folder-form" method="dialog">
+      <div class="dialog-heading">
+        <h2>Новая папка</h2>
+        <button class="icon-button" id="folder-dialog-close" type="button" aria-label="Закрыть">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
       </div>
-
-      <div class="toolbar">
-        <div class="breadcrumbs" id="breadcrumbs"></div>
-        <button id="btn-new-folder" class="btn-sm">+ Папка</button>
+      <label for="folder-name">Название</label>
+      <input id="folder-name" name="name" maxlength="120" autocomplete="off" required>
+      <div class="dialog-actions">
+        <button class="quiet-button" id="folder-cancel" type="button">Отмена</button>
+        <button class="primary-button" type="submit">Создать</button>
       </div>
+    </form>
+  </dialog>
 
-      <div class="dropzone" id="dropzone">
-        <div class="dropzone-icon">📁</div>
-        <p>Перетащи файлы или нажми для загрузки</p>
-        <p class="hint">MP4, WebM, MKV, PNG, JPG, WebP, GIF, PDF · до 500 MB</p>
-        <input type="file" id="file-input" multiple hidden>
+  <dialog class="folder-dialog" id="move-dialog">
+    <form id="move-form" method="dialog">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">Перемещение</p>
+          <h2>Выберите папку</h2>
+        </div>
+        <button class="icon-button" id="move-dialog-close" type="button" aria-label="Закрыть">
+          <i class="ti ti-x" aria-hidden="true"></i>
+        </button>
       </div>
+      <p class="move-file-name" id="move-file-name"></p>
+      <label for="move-target">Куда переместить</label>
+      <select id="move-target" name="folderId"></select>
+      <div class="dialog-actions">
+        <button class="quiet-button" id="move-cancel" type="button">Отмена</button>
+        <button class="primary-button" type="submit">Переместить</button>
+      </div>
+    </form>
+  </dialog>
 
-      <div class="folder-grid" id="folder-grid"></div>
-      <div class="file-list" id="file-list"></div>
-    </div>
-  </div>
-
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script type="module" src="/js/admin.js"></script>
 </body>

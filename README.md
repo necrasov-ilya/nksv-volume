@@ -1,28 +1,39 @@
 # nksv-volume
 
-Lightweight file sharing service with hidden admin panel.
+Минималистичный личный диск для загрузки файлов и отправки публичных ссылок на файлы или папки.
 
-## Quick start
+## Запуск
 
 ```bash
-cp .env.example .env   # edit password
+cp .env.example .env
+# замените ADMIN_PASSWORD на уникальный пароль длиной от 12 символов
 npm install
 npm start
 ```
 
-## Config (.env)
+Откройте `http://localhost:3000`. Чтобы открыть форму владельца, быстро нажмите пять раз на иконку пустого состояния или используйте `Ctrl+Shift+.`.
 
-| Variable        | Default   | Description                          |
-|-----------------|-----------|--------------------------------------|
-| PORT            | 3000      | Server port                          |
-| ADMIN_PASSWORD  | changeme  | Admin panel password                 |
-| MAX_FILE_SIZE   | 500       | Max upload size in MB                |
+## Настройки
 
-## Usage
+| Переменная | По умолчанию | Назначение |
+|---|---:|---|
+| `PORT` | `3000` | Порт HTTP-сервера |
+| `ADMIN_PASSWORD` | — | Обязательный пароль владельца, минимум 12 символов |
+| `MAX_FILE_SIZE` | `200` | Лимит одного файла в МБ; значения выше 200 автоматически ограничиваются до 200 |
+| `MAX_STORAGE_GB` | `20` | Общая квота хранилища в ГБ; значения выше 20 автоматически ограничиваются до 20 |
+| `NODE_ENV` | `development` | В `production` сессионная cookie получает флаг `Secure` |
+| `TRUST_PROXY` | `0` | Установите `1`, если приложение работает за доверенным reverse proxy |
 
-- Landing page greets visitors and explains the service
-- Triple-click the dot at the bottom of the page to open auth
-- Enter password to access admin panel
-- Drag & drop files to upload, create folders to organize
-- Click "Copy link" to share `/v/:id` — opens with inline player
-- `/r/:id` serves raw file with correct Content-Type
+## Возможности
+
+- загрузка выбором, перетаскиванием, `Ctrl+V` или кнопкой «Вставить из буфера»;
+- папки и навигация по ним;
+- перенос файлов между папками и обратно в корень;
+- переименование файлов без изменения публичной ссылки;
+- публичные ссылки `/v/:id` на файлы и папки;
+- просмотр изображений, видео и PDF в браузере;
+- HttpOnly-сессия владельца, SameSite-cookie, ограничение попыток входа и базовые security headers;
+- серверное ограничение размера одного файла до 200 МБ.
+- общая серверная квота хранилища до 20 ГБ.
+
+Публичная ссылка даёт доступ к самому объекту и содержимому расшаренной папки. Не публикуйте ссылку там, где её не должны видеть.
