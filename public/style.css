@@ -733,6 +733,31 @@ button.item-name:hover { color: var(--accent); }
 
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+.github-link {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 80;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.github-link .ti { font-size: 17px; }
+
+.github-link:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
 /* Public viewer */
 .public-page { min-height: 100vh; background: var(--paper-soft); }
 
