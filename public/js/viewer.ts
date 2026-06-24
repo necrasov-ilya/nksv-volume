@@ -1,11 +1,15 @@
 import {
   escapeHtml, fileIcon, formatDate, formatSize, isImage, isPdf, isVideo, showToast,
 } from './config.js';
+import type {
+  ClientFileEntry, ShareResponse, ShareFolderItem,
+} from './types.js';
 
-const root = document.getElementById('public-root');
-const id = location.pathname.split('/').filter(Boolean).pop();
+const root = document.getElementById('public-root') as HTMLElement | null;
+const id = location.pathname.split('/').filter(Boolean).pop() ?? '';
 
-function unavailable() {
+function unavailable(): void {
+  if (!root) return;
   document.title = 'Ничего не отправили · volume';
   root.innerHTML = `
     <section class="public-error">
@@ -15,7 +19,7 @@ function unavailable() {
     </section>`;
 }
 
-async function copyCurrentLink(button) {
+async function copyCurrentLink(button: HTMLButtonElement): Promise<void> {
   try {
     await navigator.clipboard.writeText(location.href);
     button.classList.add('copied');
@@ -30,7 +34,7 @@ async function copyCurrentLink(button) {
   }
 }
 
-function mediaFor(file) {
+function mediaFor(file: ClientFileEntry): string {
   const raw = `/r/${encodeURIComponent(file.id)}`;
   if (isVideo(file.mimeType)) {
     return `<video controls preload="metadata"><source src="${raw}" type="${escapeHtml(file.mimeType)}"></video>`;
@@ -44,7 +48,8 @@ function mediaFor(file) {
   return `<a class="primary-button" href="${raw}" download><i class="ti ti-download" aria-hidden="true"></i>Скачать файл</a>`;
 }
 
-function renderFile(file) {
+function renderFile(file: ClientFileEntry): void {
+  if (!root) return;
   document.title = `${file.originalName} · volume`;
   const mediaKind = isVideo(file.mimeType) ? ' is-video' : '';
   root.innerHTML = `
@@ -61,10 +66,11 @@ function renderFile(file) {
         </button>
       </div>
     </section>`;
-  document.getElementById('copy-public-link').addEventListener('click', (event) => copyCurrentLink(event.currentTarget));
+  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
+  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
 }
 
-function folderRow(item) {
+function folderRow(item: ClientFileEntry | ShareFolderItem): string {
   const isFolder = item.type === 'folder';
   const name = isFolder ? item.name : item.originalName;
   const meta = isFolder
@@ -84,7 +90,8 @@ function folderRow(item) {
     </article>`;
 }
 
-function renderFolder(folder, items) {
+function renderFolder(folder: { name: string }, items: (ClientFileEntry | ShareFolderItem)[]): void {
+  if (!root) return;
   document.title = `${folder.name} · volume`;
   root.innerHTML = `
     <section class="public-content">
@@ -102,21 +109,21 @@ function renderFolder(folder, items) {
         ? `<div class="public-list">${items.map(folderRow).join('')}</div>`
         : '<div class="empty-list"><i class="ti ti-folder-open" aria-hidden="true"></i>В этой папке пока пусто</div>'}
     </section>`;
-  document.getElementById('copy-public-link').addEventListener('click', (event) => copyCurrentLink(event.currentTarget));
+  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
+  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
 }
 
-async function init() {
+async function init(): Promise<void> {
+  if (!root) return;
   try {
     let response = await fetch(`/api/share/${encodeURIComponent(id)}`);
-    let payload;
+    let payload: ShareResponse;
     if (response.ok) {
-      payload = await response.json();
+      payload = await response.json() as ShareResponse;
     } else {
-      // The pre-update server only knows this endpoint. Keep existing file
-      // links alive until that process is restarted.
       response = await fetch(`/api/meta/${encodeURIComponent(id)}`);
       if (!response.ok) return unavailable();
-      payload = { type: 'file', item: await response.json() };
+      payload = { type: 'file', item: await response.json() as ClientFileEntry };
     }
     if (payload.type === 'folder') renderFolder(payload.item, payload.items);
     else renderFile(payload.item);

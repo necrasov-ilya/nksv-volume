@@ -7,7 +7,7 @@ const allowedTypes = new Set([
   'application/pdf',
 ]);
 
-const extensions = {
+const extensions: Record<string, string> = {
   'image/png': 'png',
   'image/jpeg': 'jpg',
   'image/webp': 'webp',
@@ -20,22 +20,28 @@ const extensions = {
 };
 
 let maxFileSizeMb = 200;
-let afterUpload = null;
+let afterUpload: ((id?: string) => void) | null = null;
 
-function setProgress(percent, label = 'Загрузка…') {
-  const progress = document.getElementById('upload-progress');
+function setProgress(percent: number, label: string = 'Загрузка…'): void {
+  const progress = document.getElementById('upload-progress') as HTMLElement | null;
+  if (!progress) return;
   progress.hidden = false;
-  document.getElementById('progress-label').textContent = label;
-  document.getElementById('progress-value').textContent = `${percent}%`;
-  document.getElementById('progress-fill').style.width = `${percent}%`;
+  const labelEl = document.getElementById('progress-label') as HTMLElement | null;
+  const valueEl = document.getElementById('progress-value') as HTMLElement | null;
+  const fillEl = document.getElementById('progress-fill') as HTMLElement | null;
+  if (labelEl) labelEl.textContent = label;
+  if (valueEl) valueEl.textContent = `${percent}%`;
+  if (fillEl) fillEl.style.width = `${percent}%`;
 }
 
-function hideProgress() {
-  document.getElementById('upload-progress').hidden = true;
-  document.getElementById('progress-fill').style.width = '0%';
+function hideProgress(): void {
+  const progress = document.getElementById('upload-progress') as HTMLElement | null;
+  const fillEl = document.getElementById('progress-fill') as HTMLElement | null;
+  if (progress) progress.hidden = true;
+  if (fillEl) fillEl.style.width = '0%';
 }
 
-function validateFiles(files) {
+function validateFiles(files: File[]): void {
   const maxBytes = maxFileSizeMb * 1024 * 1024;
   for (const file of files) {
     if (!allowedTypes.has(file.type)) {
@@ -47,14 +53,14 @@ function validateFiles(files) {
   }
 }
 
-async function uploadFiles(fileList) {
+async function uploadFiles(fileList: FileList | File[] | null): Promise<void> {
   const files = Array.from(fileList || []);
   if (!files.length) return;
 
   try {
     validateFiles(files);
   } catch (error) {
-    showToast(error.message);
+    showToast((error as Error).message);
     return;
   }
 
@@ -63,20 +69,20 @@ async function uploadFiles(fileList) {
   const folderId = getFolderId();
   if (folderId) formData.append('folderId', folderId);
 
-  setProgress(0, files.length === 1 ? files[0].name : `Файлов: ${files.length}`);
+  const label = files.length === 1 ? files[0].name : `Файлов: ${files.length}`;
+  setProgress(0, label);
   try {
-    const result = await api.upload(formData, (percent) => setProgress(percent,
-      files.length === 1 ? files[0].name : `Файлов: ${files.length}`));
+    const result = await api.upload(formData, (percent) => setProgress(percent, label));
     showToast(files.length === 1 ? 'Файл загружен' : `Загружено файлов: ${files.length}`);
     afterUpload?.(result.files?.[0]?.id);
   } catch (error) {
-    showToast(error.message);
+    showToast((error as Error).message);
   } finally {
     hideProgress();
   }
 }
 
-async function readClipboard() {
+async function readClipboard(): Promise<void> {
   if (!navigator.clipboard?.read) {
     showToast('Нажмите Ctrl+V, чтобы вставить файл');
     return;
@@ -84,7 +90,7 @@ async function readClipboard() {
 
   try {
     const items = await navigator.clipboard.read();
-    const files = [];
+    const files: File[] = [];
     for (const item of items) {
       const type = item.types.find((candidate) => allowedTypes.has(candidate));
       if (!type) continue;
@@ -96,29 +102,34 @@ async function readClipboard() {
     if (!files.length) throw new Error('В буфере нет поддерживаемого файла');
     await uploadFiles(files);
   } catch (error) {
-    if (error.name === 'NotAllowedError') {
+    if ((error as Error).name === 'NotAllowedError') {
       showToast('Разрешите доступ к буферу или нажмите Ctrl+V');
     } else {
-      showToast(error.message || 'Не удалось прочитать буфер');
+      showToast((error as Error).message || 'Не удалось прочитать буфер');
     }
   }
 }
 
-export async function initUpload(uploadedCallback) {
+export async function initUpload(uploadedCallback: (id?: string) => void): Promise<void> {
   afterUpload = uploadedCallback;
-  const dropzone = document.getElementById('dropzone');
-  const fileInput = document.getElementById('file-input');
-  const uploadButton = document.getElementById('btn-upload');
+  const dropzone = document.getElementById('dropzone') as HTMLElement | null;
+  const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
+  const uploadButton = document.getElementById('btn-upload') as HTMLButtonElement | null;
+  if (!dropzone || !fileInput || !uploadButton) return;
 
   try {
     const serverConfig = await api.config();
     maxFileSizeMb = serverConfig.maxFileSizeMb;
-    document.getElementById('upload-limits').textContent =
-      `PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до ${maxFileSizeMb} МБ`;
+    const limitsEl = document.getElementById('upload-limits') as HTMLElement | null;
+    if (limitsEl) {
+      limitsEl.textContent =
+        `PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до ${maxFileSizeMb} МБ`;
+    }
   } catch { /* The static 200 MB label remains as a safe fallback. */ }
 
   uploadButton.addEventListener('click', () => fileInput.click());
-  document.getElementById('btn-paste').addEventListener('click', readClipboard);
+  const pasteBtn = document.getElementById('btn-paste') as HTMLButtonElement | null;
+  if (pasteBtn) pasteBtn.addEventListener('click', readClipboard);
   dropzone.addEventListener('click', () => fileInput.click());
   dropzone.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -135,7 +146,7 @@ export async function initUpload(uploadedCallback) {
   dropzone.addEventListener('drop', (event) => {
     event.preventDefault();
     dropzone.classList.remove('dragover');
-    uploadFiles(event.dataTransfer.files);
+    if (event.dataTransfer) uploadFiles(event.dataTransfer.files);
   });
 
   fileInput.addEventListener('change', () => {
@@ -144,8 +155,10 @@ export async function initUpload(uploadedCallback) {
   });
 
   document.addEventListener('paste', (event) => {
-    const adminVisible = !document.getElementById('admin').hidden;
-    const editing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+    const admin = document.getElementById('admin') as HTMLElement | null;
+    const adminVisible = admin ? !admin.hidden : false;
+    const editing = document.activeElement instanceof HTMLInputElement
+      || document.activeElement instanceof HTMLTextAreaElement;
     if (!adminVisible || editing || !event.clipboardData?.files.length) return;
     event.preventDefault();
     uploadFiles(event.clipboardData.files);

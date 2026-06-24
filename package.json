@@ -7,6 +7,8 @@
   "scripts": {
     "start": "tsx server.ts",
     "dev": "tsx watch server.ts",
+    "build:client": "esbuild public/js/admin.ts public/js/viewer.ts --bundle --outdir=public/js --format=esm --target=es2022 --minify",
+    "dev:client": "esbuild public/js/admin.ts public/js/viewer.ts --bundle --outdir=public/js --format=esm --target=es2022 --watch",
     "typecheck": "tsc && tsc -p tsconfig.client.json"
   },
   "dependencies": {
@@ -21,6 +23,7 @@
     "@types/express": "^4.17.25",
     "@types/multer": "^2.1.0",
     "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
     "typescript": "^6.0.3"
   }
 }

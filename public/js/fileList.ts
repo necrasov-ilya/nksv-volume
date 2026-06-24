@@ -3,13 +3,17 @@ import {
   escapeHtml, extensionLabel, fileIcon, formatDate, formatSize,
   getFolderId, isImage, isPdf, isVideo, setFolderId, showToast,
 } from './config.js';
+import type {
+  ClientEntry, ClientFileEntry, ClientFolderEntry,
+  Breadcrumb, FileListResponse, FolderListResponse,
+} from './types.js';
 
-let navigateCallback = null;
-let currentItems = new Map();
-let selectedId = null;
-let movingItem = null;
+let navigateCallback: ((folderId: string | null) => void) | null = null;
+let currentItems = new Map<string, ClientEntry>();
+let selectedId: string | null = null;
+let movingItem: ClientFileEntry | null = null;
 
-function itemCountLabel(count = 0) {
+function itemCountLabel(count: number = 0): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) return `${count} объект`;
@@ -17,11 +21,11 @@ function itemCountLabel(count = 0) {
   return `${count} объектов`;
 }
 
-function shareUrl(id) {
+function shareUrl(id: string): string {
   return `${location.origin}/v/${id}`;
 }
 
-async function copyText(value, button) {
+async function copyText(value: string, button: HTMLElement | null): Promise<void> {
   try {
     await navigator.clipboard.writeText(value);
     button?.classList.add('copied');
@@ -44,10 +48,11 @@ async function copyText(value, button) {
   }
 }
 
-function renderBreadcrumbs(crumbs) {
-  const breadcrumbs = document.getElementById('breadcrumbs');
+function renderBreadcrumbs(crumbs: Breadcrumb[]): void {
+  const breadcrumbs = document.getElementById('breadcrumbs') as HTMLElement | null;
+  if (!breadcrumbs) return;
   const parentId = crumbs.length > 1 ? crumbs[crumbs.length - 2].id : '';
-  const parts = [];
+  const parts: string[] = [];
   if (crumbs.length) {
     parts.push(`
       <button class="crumb-up" type="button" data-folder-id="${escapeHtml(parentId)}" aria-label="На уровень выше">
@@ -65,7 +70,7 @@ function renderBreadcrumbs(crumbs) {
   buttons[buttons.length - 1]?.setAttribute('aria-current', 'page');
 }
 
-function visualFor(item) {
+function visualFor(item: ClientEntry): string {
   if (item.type === 'folder') {
     return '<div class="item-visual"><i class="ti ti-folder" aria-hidden="true"></i></div>';
   }
@@ -78,7 +83,7 @@ function visualFor(item) {
   return `<div class="item-visual"><i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i></div>`;
 }
 
-function menuFor(item) {
+function menuFor(item: ClientEntry): string {
   const openLabel = item.type === 'folder' ? 'Открыть папку' : 'Открыть файл';
   const move = item.type === 'folder'
     ? ''
@@ -102,42 +107,47 @@ function menuFor(item) {
     </details>`;
 }
 
-async function openMoveDialog(item) {
+async function openMoveDialog(item: ClientFileEntry): Promise<void> {
   try {
     const data = await api.listFolders();
     movingItem = item;
-    document.getElementById('move-file-name').textContent = item.originalName;
-    const select = document.getElementById('move-target');
+    const nameEl = document.getElementById('move-file-name') as HTMLElement | null;
+    if (nameEl) nameEl.textContent = item.originalName;
+    const select = document.getElementById('move-target') as HTMLSelectElement | null;
+    if (!select) return;
     select.innerHTML = [
       '<option value="">Все файлы</option>',
       ...data.folders.map((folder) =>
         `<option value="${escapeHtml(folder.id)}">${escapeHtml(folder.path)}</option>`),
     ].join('');
     select.value = item.folderId || '';
-    document.getElementById('move-dialog').showModal();
+    const dialog = document.getElementById('move-dialog') as HTMLDialogElement | null;
+    if (dialog) dialog.showModal();
     requestAnimationFrame(() => select.focus());
   } catch (error) {
-    showToast(error.message);
+    showToast((error as Error).message);
   }
 }
 
-function closeMoveDialog() {
-  document.getElementById('move-dialog').close();
+function closeMoveDialog(): void {
+  const dialog = document.getElementById('move-dialog') as HTMLDialogElement | null;
+  if (dialog) dialog.close();
   movingItem = null;
 }
 
-async function submitMove(event) {
+async function submitMove(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   if (!movingItem) return;
-  const targetFolderId = document.getElementById('move-target').value || null;
+  const select = document.getElementById('move-target') as HTMLSelectElement | null;
+  const targetFolderId = select?.value || null;
   if ((movingItem.folderId || null) === targetFolderId) {
     closeMoveDialog();
     showToast('Файл уже находится в этой папке');
     return;
   }
 
-  const submit = event.currentTarget.querySelector('button[type="submit"]');
-  submit.disabled = true;
+  const submit = (event.currentTarget as HTMLFormElement).querySelector('button[type="submit"]') as HTMLButtonElement | null;
+  if (submit) submit.disabled = true;
   try {
     await api.moveFile(movingItem.id, targetFolderId);
     closeMoveDialog();
@@ -145,15 +155,16 @@ async function submitMove(event) {
     showToast('Файл перемещён');
     await loadFiles();
   } catch (error) {
-    showToast(error.message);
+    showToast((error as Error).message);
   } finally {
-    submit.disabled = false;
+    if (submit) submit.disabled = false;
   }
 }
 
-function renderRows(folders, files) {
-  const list = document.getElementById('file-list');
-  const items = [...folders, ...files];
+function renderRows(folders: (ClientFolderEntry & { itemCount: number })[], files: ClientFileEntry[]): void {
+  const list = document.getElementById('file-list') as HTMLElement | null;
+  if (!list) return;
+  const items: ClientEntry[] = [...folders, ...files];
   currentItems = new Map(items.map((item) => [item.id, item]));
 
   if (!items.length) {
@@ -167,7 +178,7 @@ function renderRows(folders, files) {
     return;
   }
 
-  if (!currentItems.has(selectedId)) {
+  if (!currentItems.has(selectedId ?? '')) {
     selectedId = files[0]?.id || folders[0]?.id || null;
   }
 
@@ -193,10 +204,10 @@ function renderRows(folders, files) {
       </article>`;
   }).join('');
 
-  renderDetail(currentItems.get(selectedId));
+  renderDetail(currentItems.get(selectedId ?? '') ?? null);
 }
 
-function previewFor(item) {
+function previewFor(item: ClientEntry): string {
   if (item.type === 'folder') return '<i class="ti ti-folder" aria-hidden="true"></i>';
   const raw = `/r/${encodeURIComponent(item.id)}`;
   if (isImage(item.mimeType)) return `<img src="${raw}" alt="${escapeHtml(item.originalName)}">`;
@@ -205,8 +216,9 @@ function previewFor(item) {
   return `<i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i>`;
 }
 
-function renderDetail(item) {
-  const panel = document.getElementById('detail-panel');
+function renderDetail(item: ClientEntry | null): void {
+  const panel = document.getElementById('detail-panel') as HTMLElement | null;
+  if (!panel) return;
   if (!item) {
     panel.innerHTML = `
       <div class="detail-empty">
@@ -243,25 +255,33 @@ function renderDetail(item) {
       </a>
     </div>`;
 
-  document.getElementById('detail-copy').addEventListener('click', (event) => copyText(url, event.currentTarget));
-  document.getElementById('detail-share-url').addEventListener('click', (event) => event.currentTarget.select());
+  const copyBtn = document.getElementById('detail-copy') as HTMLButtonElement | null;
+  if (copyBtn) {
+    copyBtn.addEventListener('click', (event) => copyText(url, event.currentTarget as HTMLButtonElement));
+  }
+  const shareInput = document.getElementById('detail-share-url') as HTMLInputElement | null;
+  if (shareInput) {
+    shareInput.addEventListener('click', (event) => (event.currentTarget as HTMLInputElement).select());
+  }
 }
 
-function selectItem(id) {
+function selectItem(id: string): void {
   if (!currentItems.has(id)) return;
   selectedId = id;
   document.querySelectorAll('.file-row').forEach((row) => {
-    row.classList.toggle('selected', row.dataset.id === id);
+    row.classList.toggle('selected', (row as HTMLElement).dataset.id === id);
   });
-  renderDetail(currentItems.get(id));
+  renderDetail(currentItems.get(id) ?? null);
 }
 
-async function handleListClick(event) {
-  const row = event.target.closest('.file-row');
-  if (!row) return;
+async function handleListClick(event: MouseEvent): Promise<void> {
+  const target = event.target as Element;
+  const row = target.closest('.file-row') as HTMLElement | null;
+  if (!row || !row.dataset.id) return;
   const item = currentItems.get(row.dataset.id);
   if (!item) return;
-  const action = event.target.closest('[data-action]')?.dataset.action;
+  const actionEl = target.closest('[data-action]') as HTMLElement | null;
+  const action = actionEl?.dataset.action;
 
   if (!action) {
     selectItem(item.id);
@@ -270,9 +290,9 @@ async function handleListClick(event) {
 
   if (action === 'select') selectItem(item.id);
   if (action === 'navigate') navigateCallback?.(item.id);
-  if (action === 'copy') await copyText(shareUrl(item.id), event.target.closest('button'));
-  if (action === 'move') await openMoveDialog(item);
-  if (action === 'rename-file') {
+  if (action === 'copy') await copyText(shareUrl(item.id), target.closest('button'));
+  if (action === 'move' && item.type === 'file') await openMoveDialog(item);
+  if (action === 'rename-file' && item.type === 'file') {
     const name = window.prompt('Новое имя файла:', item.originalName);
     if (!name?.trim() || name.trim() === item.originalName) return;
     try {
@@ -280,19 +300,19 @@ async function handleListClick(event) {
       selectedId = item.id;
       showToast('Файл переименован');
       await loadFiles(item.id);
-    } catch (error) { showToast(error.message); }
+    } catch (error) { showToast((error as Error).message); }
   }
   if (action === 'open') {
     if (item.type === 'folder') navigateCallback?.(item.id);
     else window.open(`/v/${encodeURIComponent(item.id)}`, '_blank', 'noopener');
   }
-  if (action === 'rename') {
+  if (action === 'rename' && item.type === 'folder') {
     const name = window.prompt('Новое название папки:', item.name);
     if (!name?.trim() || name.trim() === item.name) return;
     try {
       await api.renameFolder(item.id, name.trim());
       await loadFiles(item.id);
-    } catch (error) { showToast(error.message); }
+    } catch (error) { showToast((error as Error).message); }
   }
   if (action === 'delete') {
     const label = item.type === 'folder'
@@ -305,36 +325,55 @@ async function handleListClick(event) {
       if (selectedId === item.id) selectedId = null;
       showToast('Удалено');
       await loadFiles();
-    } catch (error) { showToast(error.message); }
+    } catch (error) { showToast((error as Error).message); }
   }
 }
 
-export function initFileList(onNavigate) {
+export function initFileList(onNavigate: (folderId: string | null) => void): void {
   navigateCallback = onNavigate;
-  document.getElementById('file-list').addEventListener('click', handleListClick);
-  document.getElementById('breadcrumbs').addEventListener('click', (event) => {
-    const button = event.target.closest('[data-folder-id]');
-    if (button) navigateCallback?.(button.dataset.folderId || null);
-  });
-  document.getElementById('move-form').addEventListener('submit', submitMove);
-  document.getElementById('move-cancel').addEventListener('click', closeMoveDialog);
-  document.getElementById('move-dialog-close').addEventListener('click', closeMoveDialog);
+  const list = document.getElementById('file-list') as HTMLElement | null;
+  if (list) list.addEventListener('click', handleListClick);
+  const breadcrumbs = document.getElementById('breadcrumbs') as HTMLElement | null;
+  if (breadcrumbs) {
+    breadcrumbs.addEventListener('click', (event) => {
+      const button = (event.target as Element).closest('[data-folder-id]') as HTMLElement | null;
+      if (button) navigateCallback?.(button.dataset.folderId || null);
+    });
+  }
+  const moveForm = document.getElementById('move-form') as HTMLFormElement | null;
+  if (moveForm) moveForm.addEventListener('submit', submitMove);
+  const moveCancel = document.getElementById('move-cancel') as HTMLButtonElement | null;
+  if (moveCancel) moveCancel.addEventListener('click', closeMoveDialog);
+  const moveDialogClose = document.getElementById('move-dialog-close') as HTMLButtonElement | null;
+  if (moveDialogClose) moveDialogClose.addEventListener('click', closeMoveDialog);
 }
 
-export async function loadFiles(preferredId = null) {
-  const list = document.getElementById('file-list');
+export async function loadFiles(preferredId?: string | null): Promise<void> {
+  const list = document.getElementById('file-list') as HTMLElement | null;
   if (preferredId) selectedId = preferredId;
   try {
     const data = await api.listFiles(getFolderId());
     renderBreadcrumbs(data.breadcrumbs);
     if (data.storage) {
-      document.getElementById('storage-usage').textContent =
-        `${formatSize(data.storage.usedBytes)} из ${formatSize(data.storage.limitBytes)}`;
+      const storageEl = document.getElementById('storage-usage') as HTMLElement | null;
+      if (storageEl) {
+        storageEl.textContent =
+          `${formatSize(data.storage.usedBytes)} из ${formatSize(data.storage.limitBytes)}`;
+      }
     }
-    document.getElementById('list-label').textContent = data.breadcrumbs.at(-1)?.name || 'Сегодня';
+    const labelEl = document.getElementById('list-label') as HTMLElement | null;
+    if (labelEl) {
+      labelEl.textContent = data.breadcrumbs.at(-1)?.name || 'Сегодня';
+    }
     renderRows(data.folders, data.files);
   } catch (error) {
-    if (error.status === 401) return;
-    list.innerHTML = `<div class="empty-list"><i class="ti ti-alert-circle" aria-hidden="true"></i>${escapeHtml(error.message)}</div>`;
+    if ((error as ApiError).status === 401) return;
+    if (list) {
+      list.innerHTML = `<div class="empty-list"><i class="ti ti-alert-circle" aria-hidden="true"></i>${escapeHtml((error as Error).message)}</div>`;
+    }
   }
+}
+
+interface ApiError extends Error {
+  status: number;
 }

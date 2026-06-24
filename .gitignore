@@ -2,3 +2,5 @@ node_modules/
 uploads/
 data/
 .env
+public/js/admin.js
+public/js/viewer.js
