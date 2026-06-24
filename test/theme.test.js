@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
 
-test('theme toggle cycles system, light and dark without touching page links', () => {
-  const source = fs.readFileSync(new URL('../public/js/theme.js', import.meta.url), 'utf8');
+const source = fs.readFileSync(new URL('../public/js/theme.js', import.meta.url), 'utf8');
+
+function createContext(systemIsDark = false) {
   const values = new Map();
   const icon = { className: '' };
   const listeners = new Map();
@@ -19,6 +20,7 @@ test('theme toggle cycles system, light and dark without touching page links', (
       if (name === 'data-theme') delete documentElement.dataset.theme;
     },
   };
+  const mediaListeners = new Map();
   const context = {
     document: {
       readyState: 'complete',
@@ -28,26 +30,44 @@ test('theme toggle cycles system, light and dark without touching page links', (
     localStorage: {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => values.set(key, value),
-      removeItem: (key) => values.delete(key),
+    },
+    window: {
+      matchMedia: () => ({
+        matches: systemIsDark,
+        addEventListener: (event, callback) => mediaListeners.set(event, callback),
+      }),
     },
   };
 
   vm.runInNewContext(source, context);
-  assert.equal(documentElement.dataset.theme, undefined);
-  assert.equal(icon.className, 'ti ti-device-desktop');
+  return { button, documentElement, icon, listeners, values };
+}
 
-  listeners.get('click')();
-  assert.equal(documentElement.dataset.theme, 'light');
-  assert.equal(values.get('nksv_theme'), 'light');
-  assert.equal(icon.className, 'ti ti-sun');
+test('follows the light system theme until the first click, then toggles explicitly', () => {
+  const { documentElement, icon, listeners, values } = createContext(false);
+
+  assert.equal(documentElement.dataset.theme, undefined);
+  assert.equal(icon.className, 'ti ti-moon');
 
   listeners.get('click')();
   assert.equal(documentElement.dataset.theme, 'dark');
   assert.equal(values.get('nksv_theme'), 'dark');
-  assert.equal(icon.className, 'ti ti-moon');
+  assert.equal(icon.className, 'ti ti-sun');
 
   listeners.get('click')();
+  assert.equal(documentElement.dataset.theme, 'light');
+  assert.equal(values.get('nksv_theme'), 'light');
+  assert.equal(icon.className, 'ti ti-moon');
+});
+
+test('first click switches a dark system theme to light', () => {
+  const { documentElement, icon, listeners, values } = createContext(true);
+
   assert.equal(documentElement.dataset.theme, undefined);
-  assert.equal(values.has('nksv_theme'), false);
-  assert.equal(icon.className, 'ti ti-device-desktop');
+  assert.equal(icon.className, 'ti ti-sun');
+
+  listeners.get('click')();
+  assert.equal(documentElement.dataset.theme, 'light');
+  assert.equal(values.get('nksv_theme'), 'light');
+  assert.equal(icon.className, 'ti ti-moon');
 });
