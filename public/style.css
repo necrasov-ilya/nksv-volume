@@ -6,11 +6,12 @@
   --ink-muted: #77736f;
   --line: #e6e2dd;
   --line-strong: #cfc9c2;
-  --accent: #e64b13;
-  --accent-soft: #fff3ec;
+  --accent: #ac2954;
+  --accent-soft: #faedf2;
   --danger: #b42318;
   --success: #16794b;
   --on-ink: #ffffff;
+  --on-accent: #ffffff;
   --primary-hover: #2a2a27;
   --surface-icon: #292826;
   --subtle-hover: rgba(24, 24, 23, 0.07);
@@ -18,7 +19,7 @@
   --floating: rgba(255, 255, 255, 0.88);
   --preview: #151514;
   --preview-ink: #ffffff;
-  --accent-hover: #cc3e0d;
+  --accent-hover: #922047;
   --landing-icon: #8a8580;
   --landing-lead: #3c3a37;
   --quiet-copy: #99938d;
@@ -28,26 +29,27 @@
 }
 
 :root[data-theme="dark"] {
-  --paper: #171716;
+  --paper: #141413;
   --paper-warm: #1d1d1b;
   --paper-soft: #20201e;
   --ink: #f2f0ed;
   --ink-muted: #aaa49d;
   --line: #302f2c;
   --line-strong: #4b4843;
-  --accent: #ff6b32;
-  --accent-soft: #382117;
+  --accent: #ac2954;
+  --accent-soft: #321923;
   --danger: #ff746a;
   --success: #4bc58b;
-  --on-ink: #171716;
+  --on-ink: #141413;
+  --on-accent: #ffffff;
   --primary-hover: #ddd9d4;
   --surface-icon: #dedad5;
   --subtle-hover: rgba(255, 255, 255, 0.07);
   --overlay: rgba(0, 0, 0, 0.65);
-  --floating: rgba(23, 23, 22, 0.88);
+  --floating: rgba(20, 20, 19, 0.88);
   --preview: #0d0d0c;
   --preview-ink: #ffffff;
-  --accent-hover: #ff7a46;
+  --accent-hover: #c03563;
   --landing-icon: #aaa49d;
   --landing-lead: #d3cfca;
   --quiet-copy: #8f8982;
@@ -55,26 +57,27 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --paper: #171716;
+    --paper: #141413;
     --paper-warm: #1d1d1b;
     --paper-soft: #20201e;
     --ink: #f2f0ed;
     --ink-muted: #aaa49d;
     --line: #302f2c;
     --line-strong: #4b4843;
-    --accent: #ff6b32;
-    --accent-soft: #382117;
+    --accent: #ac2954;
+    --accent-soft: #321923;
     --danger: #ff746a;
     --success: #4bc58b;
-    --on-ink: #171716;
+    --on-ink: #141413;
+    --on-accent: #ffffff;
     --primary-hover: #ddd9d4;
     --surface-icon: #dedad5;
     --subtle-hover: rgba(255, 255, 255, 0.07);
     --overlay: rgba(0, 0, 0, 0.65);
-    --floating: rgba(23, 23, 22, 0.88);
+    --floating: rgba(20, 20, 19, 0.88);
     --preview: #0d0d0c;
     --preview-ink: #ffffff;
-    --accent-hover: #ff7a46;
+    --accent-hover: #c03563;
     --landing-icon: #aaa49d;
     --landing-lead: #d3cfca;
     --quiet-copy: #8f8982;
@@ -725,6 +728,7 @@ button.item-name:hover { color: var(--accent); }
 .detail-actions .primary-button {
   border-color: var(--accent);
   background: var(--accent);
+  color: var(--on-accent);
 }
 
 .detail-actions .primary-button:hover { background: var(--accent-hover); }
@@ -854,6 +858,12 @@ button.item-name:hover { color: var(--accent); }
 /* Public viewer */
 .public-page { min-height: 100vh; background: var(--paper-soft); }
 
+:root[data-theme="dark"] .public-page { background: var(--paper); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .public-page { background: var(--paper); }
+}
+
 .public-content {
   width: min(1280px, calc(100% - 64px));
   margin: 0 auto;
@@ -940,6 +950,7 @@ button.item-name:hover { color: var(--accent); }
 .public-file-footer .primary-button {
   border-color: var(--accent);
   background: var(--accent);
+  color: var(--on-accent);
 }
 
 .public-file-footer .primary-button:hover { background: var(--accent-hover); }
