@@ -1,9 +1,9 @@
 import crypto from 'crypto';
 
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const sessions = new Map();
+const sessions = new Map<string, number>();
 
-function digest(token) {
+function digest(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
@@ -14,14 +14,14 @@ function removeExpiredSessions() {
   }
 }
 
-export function createToken() {
+export function createToken(): string {
   removeExpiredSessions();
   const token = crypto.randomBytes(32).toString('base64url');
   sessions.set(digest(token), Date.now() + SESSION_TTL_MS);
   return token;
 }
 
-export function isValidToken(token) {
+export function isValidToken(token: string | null | undefined): boolean {
   if (!token) return false;
   const key = digest(token);
   const expiresAt = sessions.get(key);
@@ -32,7 +32,7 @@ export function isValidToken(token) {
   return true;
 }
 
-export function revokeToken(token) {
+export function revokeToken(token: string | null | undefined): boolean {
   if (!token) return false;
   return sessions.delete(digest(token));
 }

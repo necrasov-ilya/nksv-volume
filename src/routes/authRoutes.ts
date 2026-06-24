@@ -1,38 +1,44 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import crypto from 'crypto';
 import { config } from '../config.js';
 import { authMiddleware, getSessionToken } from '../middleware/auth.js';
 import { createToken, revokeToken, sessionTtlSeconds } from '../utils/tokenStore.js';
 
+interface AttemptState {
+  count: number;
+  windowStartedAt: number;
+  blockedUntil: number;
+}
+
 const router = Router();
-const attempts = new Map();
+const attempts = new Map<string, AttemptState>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000;
 const BLOCK_MS = 15 * 60 * 1000;
 const passwordSalt = crypto.randomBytes(16);
 const expectedPassword = crypto.scryptSync(config.adminPassword, passwordSalt, 64);
 
-function verifyPassword(value) {
+function verifyPassword(value: unknown): boolean {
   const candidate = crypto.scryptSync(String(value || ''), passwordSalt, 64);
   return crypto.timingSafeEqual(candidate, expectedPassword);
 }
 
-function clientKey(req) {
+function clientKey(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
-function getAttemptState(key) {
+function getAttemptState(key: string): AttemptState {
   const now = Date.now();
   const current = attempts.get(key);
   if (!current || now - current.windowStartedAt > WINDOW_MS) {
-    const fresh = { count: 0, windowStartedAt: now, blockedUntil: 0 };
+    const fresh: AttemptState = { count: 0, windowStartedAt: now, blockedUntil: 0 };
     attempts.set(key, fresh);
     return fresh;
   }
   return current;
 }
 
-function sessionCookie(token, maxAge = sessionTtlSeconds) {
+function sessionCookie(token: string, maxAge: number = sessionTtlSeconds): string {
   const parts = [
     `nksv_session=${encodeURIComponent(token)}`,
     'Path=/',

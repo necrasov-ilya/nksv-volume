@@ -3,11 +3,12 @@ import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import { findMeta, loadMeta } from '../utils/metaStore.js';
+import type { FileEntry, FolderEntry, MetaEntry } from '../types.js';
 
 const router = Router();
 
-function safeFile(entry) {
-  const { storedName, ...safe } = entry;
+function safeFile(entry: FileEntry): Omit<FileEntry, 'storedName'> {
+  const { storedName: _storedName, ...safe } = entry;
   return safe;
 }
 
@@ -38,8 +39,8 @@ router.get('/api/share/:id', (req, res) => {
     .filter((item) => (item.folderId || null) === entry.id)
     .sort((a, b) => {
       if (a.type === b.type) {
-        const left = a.name || a.originalName || '';
-        const right = b.name || b.originalName || '';
+        const left = (a.type === 'folder' ? a.name : a.originalName) || '';
+        const right = (b.type === 'folder' ? b.name : b.originalName) || '';
         return left.localeCompare(right, 'ru');
       }
       return a.type === 'folder' ? -1 : 1;
@@ -47,7 +48,7 @@ router.get('/api/share/:id', (req, res) => {
     .map((item) => (item.type === 'folder'
       ? {
           id: item.id,
-          type: 'folder',
+          type: 'folder' as const,
           name: item.name,
           itemCount: meta.filter((child) => (child.folderId || null) === item.id).length,
         }
@@ -55,7 +56,7 @@ router.get('/api/share/:id', (req, res) => {
 
   return res.json({
     type: 'folder',
-    item: { id: entry.id, type: 'folder', name: entry.name },
+    item: { id: entry.id, type: 'folder' as const, name: entry.name },
     items,
   });
 });

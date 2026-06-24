@@ -18,7 +18,25 @@ if (adminPassword.length < 12) {
 const requestedMaxFileSize = parseInt(process.env.MAX_FILE_SIZE || '200', 10);
 const requestedMaxStorageGb = parseFloat(process.env.MAX_STORAGE_GB || '20');
 
-export const config = {
+interface AppConfig {
+  port: number;
+  adminPassword: string;
+  isProduction: boolean;
+  trustProxy: number | boolean;
+  maxFileSizeMb: number;
+  maxStorageGb: number;
+  maxFilesPerUpload: number;
+  paths: {
+    root: string;
+    uploads: string;
+    data: string;
+    metaFile: string;
+    public: string;
+  };
+  mimeWhitelist: string[];
+}
+
+export const config: AppConfig = {
   port: parseInt(process.env.PORT || '3000', 10),
   adminPassword,
   isProduction: process.env.NODE_ENV === 'production',
