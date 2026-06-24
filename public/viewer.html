@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
+  <meta name="color-scheme" content="light dark">
   <title>volume</title>
+  <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/vendor/tabler/tabler-icons.min.css">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -16,10 +17,15 @@
     </div>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <a class="github-link" href="https://github.com/necrasov-ilya/nksv-volume" target="_blank" rel="noopener noreferrer">
-    <i class="ti ti-brand-github" aria-hidden="true"></i>
-    GitHub
-  </a>
+  <div class="corner-actions">
+    <a class="github-link" href="https://github.com/necrasov-ilya/nksv-volume" target="_blank" rel="noopener noreferrer">
+      <i class="ti ti-brand-github" aria-hidden="true"></i>
+      GitHub
+    </a>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему" title="Сменить тему">
+      <i class="ti ti-moon" aria-hidden="true"></i>
+    </button>
+  </div>
   <script type="module" src="/js/viewer.js"></script>
 </body>
 </html>
