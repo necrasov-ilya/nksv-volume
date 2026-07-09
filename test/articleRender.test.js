@@ -37,6 +37,54 @@ test('renders headings and custom blocks', () => {
   assert.equal(result.headings[0].text, 'Заголовок');
 });
 
+test('renders list items with inline text nodes', () => {
+  const result = renderArticle({
+    content: [{
+      type: 'doc',
+      content: [{
+        type: 'bulletList',
+        content: [
+          {
+            type: 'listItem',
+            content: [{ type: 'text', text: 'Первый пункт' }],
+          },
+          {
+            type: 'listItem',
+            content: [{
+              type: 'paragraph',
+              content: [{ type: 'text', text: 'Второй пункт' }],
+            }],
+          },
+        ],
+      }],
+    }],
+  });
+
+  assert.match(result.html, /<li>Первый пункт<\/li>/);
+  assert.match(result.html, /<li><p>Второй пункт<\/p>\s*<\/li>/);
+});
+
+test('renders horizontal rules from blocks and markdown paragraphs', () => {
+  const result = renderArticle({
+    content: [{
+      type: 'doc',
+      content: [
+        { type: 'horizontalRule' },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '---' }],
+        },
+        {
+          type: 'paragraph',
+          content: [{ type: 'text', text: '***' }],
+        },
+      ],
+    }],
+  });
+
+  assert.equal((result.html.match(/<hr>/g) || []).length, 3);
+});
+
 test('escapes unsafe link targets', () => {
   const result = renderArticle({
     content: [{

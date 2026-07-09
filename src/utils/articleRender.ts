@@ -33,6 +33,17 @@ function safeImageUrl(raw: string): string {
   return '';
 }
 
+const MARKDOWN_RULE_RE = /^(-{3,}|\*{3,}|_{3,})$/;
+
+function isMarkdownRuleParagraph(block: Block): boolean {
+  if (block.type !== 'paragraph' || !block.content?.length) return false;
+  const plain = block.content
+    .map((node) => (node.type === 'text' ? node.text ?? '' : ''))
+    .join('')
+    .trim();
+  return MARKDOWN_RULE_RE.test(plain);
+}
+
 function slugify(value: string): string {
   const normalized = value
     .trim()
@@ -75,6 +86,11 @@ function renderBlockContent(blocks: Block[] | undefined, headings: ArticleHeadin
   if (!blocks?.length) return '';
   const parts: string[] = [];
   for (const block of blocks) {
+    if (block.type === 'text' || block.type === 'hardBreak') {
+      const inline = renderInline([block]);
+      if (inline) parts.push(inline);
+      continue;
+    }
     const rendered = renderBlock(block, headings);
     if (rendered.html) parts.push(rendered.html);
   }
@@ -128,6 +144,7 @@ function renderBlock(block: Block, headings: ArticleHeading[]): { html: string; 
       };
     }
     case 'paragraph': {
+      if (isMarkdownRuleParagraph(block)) return { html: '<hr>\n' };
       const text = renderInline(block.content);
       return { html: text.trim() ? `<p>${text}</p>\n` : '<p></p>\n' };
     }
@@ -166,6 +183,19 @@ function renderBlock(block: Block, headings: ArticleHeading[]): { html: string; 
     }
     case 'compareTable':
       return { html: renderTable(block.attrs) };
+    case 'horizontalRule':
+      return { html: '<hr>\n' };
+    case 'codeBlock': {
+      const text = escapeHtml((block.content ?? [])
+        .filter((node) => node.type === 'text')
+        .map((node) => node.text ?? '')
+        .join(''));
+      return { html: `<pre><code>${text}</code></pre>\n` };
+    }
+    case 'blockquote': {
+      const content = renderBlockContent(block.content, headings);
+      return { html: content ? `<blockquote>${content}</blockquote>\n` : '' };
+    }
     case 'image': {
       const src = escapeHtml(safeImageUrl(String(block.attrs?.src ?? '')));
       const alt = escapeHtml(String(block.attrs?.alt ?? ''));

@@ -20,15 +20,23 @@ function unavailable(): void {
     </section>`;
 }
 
+function copyButtonHtml(): string {
+  return `
+    <button class="primary-button public-copy-button" id="copy-public-link" type="button" aria-label="Скопировать ссылку">
+      <i class="ti ti-copy" aria-hidden="true"></i>
+      <span class="public-copy-button__label">Скопировать ссылку</span>
+    </button>`;
+}
+
 async function copyCurrentLink(button: HTMLButtonElement): Promise<void> {
   try {
     await navigator.clipboard.writeText(location.href);
     button.classList.add('copied');
-    button.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i>Скопировано';
+    button.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i><span class="public-copy-button__label">Скопировано</span>';
     showToast('Ссылка скопирована');
     setTimeout(() => {
       button.classList.remove('copied');
-      button.innerHTML = '<i class="ti ti-copy" aria-hidden="true"></i>Скопировать ссылку';
+      button.innerHTML = '<i class="ti ti-copy" aria-hidden="true"></i><span class="public-copy-button__label">Скопировать ссылку</span>';
     }, 1400);
   } catch {
     window.prompt('Скопируйте ссылку:', location.href);
@@ -61,10 +69,7 @@ function renderFile(file: ClientFileEntry): void {
       <div class="public-media${mediaKind}">${mediaFor(file)}</div>
       <div class="public-file-footer">
         <p class="public-subtitle">${escapeHtml(formatSize(file.size))} · ${escapeHtml(formatDate(file.uploadedAt))}</p>
-        <button class="primary-button" id="copy-public-link" type="button">
-          <i class="ti ti-copy" aria-hidden="true"></i>
-          Скопировать ссылку
-        </button>
+        ${copyButtonHtml()}
       </div>
     </section>`;
   const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
@@ -81,18 +86,15 @@ function renderArticle(item: ShareArticleItem & { html: string }): void {
     ? `<div class="public-article-cover"><img src="${escapeHtml(item.coverImage)}" alt=""></div>`
     : '';
   root.innerHTML = `
+    ${cover}
     <section class="public-content public-article-content">
       <div class="public-heading">
         <div>
           <h1>${escapeHtml(item.title)}</h1>
           ${subtitle}
         </div>
-        <button class="primary-button" id="copy-public-link" type="button">
-          <i class="ti ti-copy" aria-hidden="true"></i>
-          Скопировать ссылку
-        </button>
+        ${copyButtonHtml()}
       </div>
-      ${cover}
       <div class="article-body">${item.html}</div>
     </section>`;
   const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
@@ -132,10 +134,7 @@ function renderFolder(folder: { name: string }, items: (ClientFileEntry | ShareF
           <h1>${escapeHtml(folder.name)}</h1>
           <p class="public-subtitle">Общая папка · ${items.length} объектов</p>
         </div>
-        <button class="primary-button" id="copy-public-link" type="button">
-          <i class="ti ti-copy" aria-hidden="true"></i>
-          Скопировать ссылку
-        </button>
+        ${copyButtonHtml()}
       </div>
       ${items.length
         ? `<div class="public-list">${items.map(folderRow).join('')}</div>`

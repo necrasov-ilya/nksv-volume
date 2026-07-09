@@ -1,9 +1,15 @@
 .admin-app {
   --admin-toolbar-bg: #172033;
   --admin-toolbar-fg: #ffffff;
-  --admin-tooltip-bg: var(--paper);
-  --admin-tooltip-fg: var(--ink);
+  --admin-tooltip-bg: #ffffff;
+  --admin-tooltip-fg: #181817;
+  --admin-tooltip-border: #cfc5b7;
   --admin-placeholder: var(--ink-muted);
+}
+
+#editor-portal-root {
+  position: static;
+  pointer-events: none;
 }
 
 html[data-theme="dark"] .admin-app {
@@ -11,8 +17,10 @@ html[data-theme="dark"] .admin-app {
   --admin-toolbar-fg: #f0ede8;
   --admin-tooltip-bg: #2f2d2a;
   --admin-tooltip-fg: #f0ede8;
+  --admin-tooltip-border: #4a4743;
   --admin-placeholder: #9a948a;
   --admin-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --admin-pane-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.48);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -21,15 +29,19 @@ html[data-theme="dark"] .admin-app {
     --admin-toolbar-fg: #f0ede8;
     --admin-tooltip-bg: #2f2d2a;
     --admin-tooltip-fg: #f0ede8;
+    --admin-tooltip-border: #4a4743;
     --admin-placeholder: #9a948a;
     --admin-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+    --admin-pane-shadow: 0 16px 32px -12px rgba(0, 0, 0, 0.48);
   }
 }
 
 .admin-editor {
   width: min(1360px, 100%);
+  max-width: 100%;
   margin: 0 auto;
-  padding: clamp(20px, 3vw, 34px);
+  padding: 0 clamp(16px, 3vw, 28px) 20px;
+  overflow-x: clip;
 }
 
 .admin-app button:disabled {
@@ -91,25 +103,26 @@ html[data-theme="dark"] .admin-app {
   content: attr(data-tip);
   position: absolute;
   left: 50%;
-  bottom: calc(100% + 8px);
-  z-index: 40;
+  top: calc(100% + 8px);
+  z-index: 2;
   transform: translateX(-50%);
   padding: 5px 8px;
-  border: 1px solid var(--admin-border-strong);
+  border: 1px solid var(--admin-tooltip-border, var(--admin-border-strong));
   border-radius: 8px;
-  background: var(--admin-tooltip-bg);
-  color: var(--admin-tooltip-fg);
+  background-color: var(--admin-tooltip-bg, #ffffff);
+  color: var(--admin-tooltip-fg, #181817);
   box-shadow: var(--admin-shadow);
   font-size: 0.72rem;
   font-weight: 700;
   line-height: 1.2;
   white-space: nowrap;
+  opacity: 1;
   pointer-events: none;
 }
 
 .editor-bubble-toolbar--below button[data-tip]:hover::after {
-  bottom: auto;
-  top: calc(100% + 8px);
+  top: auto;
+  bottom: calc(100% + 8px);
 }
 
 .inline-insert__menu {

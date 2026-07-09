@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/react";
 import { Bold, Heading1, Heading2, Heading3, Italic, Link, List, ListOrdered, Quote } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 type ToolbarProps = {
   editor: Editor;
@@ -12,13 +13,21 @@ type ToolbarAnchor = {
   left: number;
   top: number;
   bottom: number;
-  canvasWidth: number;
+  relTop: number;
+  relBottom: number;
+  boundsLeft: number;
+  boundsRight: number;
   canvasHeight: number;
-  placement: ToolbarPlacement;
 };
 
 const TOOLBAR_GAP = 10;
 const CANVAS_EDGE_GAP = 12;
+
+function getPortalRoot(): HTMLElement {
+  return document.getElementById('editor-portal-root')
+    ?? document.querySelector('.admin-app')
+    ?? document.body;
+}
 
 export function Toolbar({ editor }: ToolbarProps) {
   const [anchor, setAnchor] = useState<ToolbarAnchor | null>(null);
@@ -62,17 +71,18 @@ export function Toolbar({ editor }: ToolbarProps) {
         const start = view.coordsAtPos(selection.from);
         const end = view.coordsAtPos(selection.to);
         const canvasRect = canvas.getBoundingClientRect();
-        const left = (start.left + end.right) / 2 - canvasRect.left;
-        const top = Math.min(start.top, end.top) - canvasRect.top;
-        const bottom = Math.max(start.bottom, end.bottom) - canvasRect.top;
+        const relTop = Math.min(start.top, end.top) - canvasRect.top;
+        const relBottom = Math.max(start.bottom, end.bottom) - canvasRect.top;
 
         setAnchor({
-          left: Math.max(CANVAS_EDGE_GAP, Math.min(left, canvasRect.width - CANVAS_EDGE_GAP)),
-          top,
-          bottom,
-          canvasWidth: canvasRect.width,
+          left: (start.left + end.right) / 2,
+          top: Math.min(start.top, end.top),
+          bottom: Math.max(start.bottom, end.bottom),
+          relTop,
+          relBottom,
+          boundsLeft: canvasRect.left + CANVAS_EDGE_GAP,
+          boundsRight: canvasRect.right - CANVAS_EDGE_GAP,
           canvasHeight: canvasRect.height,
-          placement: choosePlacement(top, bottom, canvasRect.height, toolbarHeight),
         });
       } catch {
         setAnchor(null);
@@ -82,34 +92,36 @@ export function Toolbar({ editor }: ToolbarProps) {
     editor.on("selectionUpdate", updateAnchor);
     editor.on("transaction", updateAnchor);
     window.addEventListener("resize", updateAnchor);
+    window.addEventListener("scroll", updateAnchor, true);
     updateAnchor();
 
     return () => {
       editor.off("selectionUpdate", updateAnchor);
       editor.off("transaction", updateAnchor);
       window.removeEventListener("resize", updateAnchor);
+      window.removeEventListener("scroll", updateAnchor, true);
     };
-  }, [editor, toolbarHeight]);
+  }, [editor]);
+
+  const resolvedPlacement = useMemo(() => {
+    if (!anchor) return "above" as ToolbarPlacement;
+    return choosePlacement(anchor.relTop, anchor.relBottom, anchor.canvasHeight, toolbarHeight);
+  }, [anchor, toolbarHeight]);
 
   const resolvedLeft = useMemo(() => {
     if (!anchor) return 0;
     if (!toolbarWidth) return anchor.left;
 
     const halfWidth = toolbarWidth / 2;
-    const minLeft = halfWidth + CANVAS_EDGE_GAP;
-    const maxLeft = anchor.canvasWidth - halfWidth - CANVAS_EDGE_GAP;
+    const minLeft = anchor.boundsLeft + halfWidth;
+    const maxLeft = anchor.boundsRight - halfWidth;
 
     if (maxLeft < minLeft) {
-      return anchor.canvasWidth / 2;
+      return (anchor.boundsLeft + anchor.boundsRight) / 2;
     }
 
     return Math.max(minLeft, Math.min(anchor.left, maxLeft));
   }, [anchor, toolbarWidth]);
-
-  const resolvedPlacement = useMemo(() => {
-    if (!anchor) return "above" as ToolbarPlacement;
-    return choosePlacement(anchor.top, anchor.bottom, anchor.canvasHeight, toolbarHeight);
-  }, [anchor, toolbarHeight]);
 
   useLayoutEffect(() => {
     if (!anchor || !toolbarRef.current) return;
@@ -131,7 +143,7 @@ export function Toolbar({ editor }: ToolbarProps) {
 
   const isActive = (name: string, attrs?: Record<string, unknown>) => editor.isActive(name, attrs);
 
-  return (
+  const toolbar = (
     <div
       ref={toolbarRef}
       className={`editor-bubble-toolbar editor-bubble-toolbar--${resolvedPlacement}`}
@@ -229,4 +241,6 @@ export function Toolbar({ editor }: ToolbarProps) {
       </button>
     </div>
   );
+
+  return createPortal(toolbar, getPortalRoot());
 }

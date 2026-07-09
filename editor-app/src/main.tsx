@@ -11,6 +11,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <div className="admin-app">
       <App />
+      <div id="editor-portal-root" />
     </div>
   </StrictMode>,
 );

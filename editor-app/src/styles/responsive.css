@@ -1,12 +1,11 @@
 
 @media (max-width: 1100px) {
+  .admin-editor-topbar,
   .admin-editor-layout {
     grid-template-columns: 1fr;
   }
 
-  .admin-editor-inspector {
-    position: static;
-  }
+
 }
 
 @media (max-width: 820px) {

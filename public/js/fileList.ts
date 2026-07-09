@@ -117,7 +117,7 @@ function menuFor(item: ClientEntry): string {
     ? `<button type="button" data-action="publish"><i class="ti ti-world" aria-hidden="true"></i>Опубликовать</button>`
     : '';
   const unpublish = item.type === 'article' && item.status === 'published'
-    ? `<button type="button" data-action="unpublish"><i class="ti ti-eye-off" aria-hidden="true"></i>Снять с публикации</button>`
+    ? `<button type="button" data-action="unpublish" aria-label="Снять с публикации"><i class="ti ti-eye-off" aria-hidden="true"></i>В черновик</button>`
     : '';
   return `
     <details class="row-menu">
@@ -236,7 +236,9 @@ function renderRows(
         <div class="item-copy">
           ${isFolder
             ? `<button class="item-name" type="button" data-action="navigate">${escapeHtml(name)}</button>`
-            : `<button class="item-name" type="button" data-action="select">${escapeHtml(name)}</button>`}
+            : item.type === 'article'
+              ? `<a class="item-name" href="/editor?id=${encodeURIComponent(item.id)}">${escapeHtml(name)}</a>`
+              : `<button class="item-name" type="button" data-action="select">${escapeHtml(name)}</button>`}
           <p class="item-meta">${escapeHtml(itemMeta(item))}</p>
         </div>
         <button class="row-action" type="button" data-action="copy" aria-label="Скопировать публичную ссылку">
@@ -342,6 +344,7 @@ async function handleListClick(event: MouseEvent): Promise<void> {
   const action = actionEl?.dataset.action;
 
   if (!action) {
+    if (target.closest('a.item-name')) return;
     selectItem(item.id);
     return;
   }

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   getArticle, getArticleId, listImages, session, updateArticle, uploadImage,
 } from './api.js';
+import { EditorActionPill } from './components/EditorActionPill.js';
 import { EditorCanvas, EditorInspector } from './components/EditorLayout.js';
 import { copyArticleShareLink } from './utils/share.js';
 import type { ArticleContent, ArticleDraft, Block, ImageAsset } from './types.js';
@@ -151,11 +152,21 @@ export function App() {
   return (
     <div className="admin-editor">
       <header className="admin-editor-topbar">
-        <button type="button" className="admin-button-ghost" onClick={handleBack}>
-          <ArrowLeft size={16} />
-          К файлам
-        </button>
-        <span className="admin-editor-topbar__label">Редактирование статьи</span>
+        <div className="admin-editor-topbar__main">
+          <button type="button" className="admin-button-ghost" onClick={handleBack}>
+            <ArrowLeft size={16} />
+            К файлам
+          </button>
+          <span className="admin-editor-topbar__label">Редактирование статьи</span>
+        </div>
+        <EditorActionPill
+          saving={saving}
+          hasChanges={hasChanges}
+          status={article.status}
+          onSave={() => { void save(false); }}
+          onPublish={() => { void save(true); }}
+          onCopyLink={() => { void copyShareLink(); }}
+        />
       </header>
 
       {error && <p className="admin-error">{error}</p>}
@@ -168,12 +179,8 @@ export function App() {
         <EditorInspector
           article={article}
           hasChanges={hasChanges}
-          saving={saving}
           images={images}
           uploadingCover={uploadingCover}
-          onSave={() => { void save(false); }}
-          onPublish={() => { void save(true); }}
-          onCopyLink={() => { void copyShareLink(); }}
           onTitle={(title) => patch({ title })}
           onAnnotation={(annotation) => patch({ annotation })}
           onTags={(tags) => patch({ tags })}
