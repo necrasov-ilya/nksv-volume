@@ -1,8 +1,9 @@
 import {
-  escapeHtml, fileIcon, formatDate, formatSize, isImage, isPdf, isVideo, showToast,
+  escapeHtml, formatDate, formatSize, showToast,
 } from './config.js';
+import { resolveItemIcon } from './itemKind.js';
 import type {
-  ClientFileEntry, ShareResponse, ShareFolderItem,
+  ClientFileEntry, ShareResponse, ShareFolderItem, ShareArticleItem,
 } from './types.js';
 
 const root = document.getElementById('public-root') as HTMLElement | null;
@@ -36,13 +37,13 @@ async function copyCurrentLink(button: HTMLButtonElement): Promise<void> {
 
 function mediaFor(file: ClientFileEntry): string {
   const raw = `/r/${encodeURIComponent(file.id)}`;
-  if (isVideo(file.mimeType)) {
+  if (file.mimeType.startsWith('video/')) {
     return `<video controls preload="metadata"><source src="${raw}" type="${escapeHtml(file.mimeType)}"></video>`;
   }
-  if (isImage(file.mimeType)) {
+  if (file.mimeType.startsWith('image/')) {
     return `<img src="${raw}" alt="${escapeHtml(file.originalName)}">`;
   }
-  if (isPdf(file.mimeType)) {
+  if (file.mimeType === 'application/pdf') {
     return `<iframe src="${raw}" title="${escapeHtml(file.originalName)}"></iframe>`;
   }
   return `<a class="primary-button" href="${raw}" download><i class="ti ti-download" aria-hidden="true"></i>Скачать файл</a>`;
@@ -51,7 +52,7 @@ function mediaFor(file: ClientFileEntry): string {
 function renderFile(file: ClientFileEntry): void {
   if (!root) return;
   document.title = `${file.originalName} · volume`;
-  const mediaKind = isVideo(file.mimeType) ? ' is-video' : '';
+  const mediaKind = file.mimeType.startsWith('video/') ? ' is-video' : '';
   root.innerHTML = `
     <section class="public-content public-file-content">
       <div class="public-file-heading">
@@ -70,13 +71,44 @@ function renderFile(file: ClientFileEntry): void {
   if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
 }
 
-function folderRow(item: ClientFileEntry | ShareFolderItem): string {
+function renderArticle(item: ShareArticleItem & { html: string }): void {
+  if (!root) return;
+  document.title = `${item.title} · volume`;
+  const subtitle = item.annotation
+    ? `<p class="public-subtitle">${escapeHtml(item.annotation)}</p>`
+    : `<p class="public-subtitle">Статья · ${escapeHtml(formatDate(item.updatedAt))}</p>`;
+  const cover = item.coverImage
+    ? `<div class="public-article-cover"><img src="${escapeHtml(item.coverImage)}" alt=""></div>`
+    : '';
+  root.innerHTML = `
+    <section class="public-content public-article-content">
+      <div class="public-heading">
+        <div>
+          <h1>${escapeHtml(item.title)}</h1>
+          ${subtitle}
+        </div>
+        <button class="primary-button" id="copy-public-link" type="button">
+          <i class="ti ti-copy" aria-hidden="true"></i>
+          Скопировать ссылку
+        </button>
+      </div>
+      ${cover}
+      <div class="article-body">${item.html}</div>
+    </section>`;
+  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
+  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
+}
+
+function folderRow(item: ClientFileEntry | ShareFolderItem | ShareArticleItem): string {
   const isFolder = item.type === 'folder';
-  const name = isFolder ? item.name : item.originalName;
+  const isArticle = item.type === 'article';
+  const name = isFolder ? item.name : isArticle ? item.title : item.originalName;
   const meta = isFolder
     ? `${item.itemCount || 0} объектов`
-    : `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
-  const icon = isFolder ? 'ti-folder' : fileIcon(item.mimeType);
+    : isArticle
+      ? `Статья · ${formatDate(item.updatedAt)}`
+      : `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
+  const icon = isFolder ? 'ti-folder' : isArticle ? 'ti-article' : resolveItemIcon(item);
   return `
     <article class="public-row">
       <i class="ti ${icon}" aria-hidden="true"></i>
@@ -90,7 +122,7 @@ function folderRow(item: ClientFileEntry | ShareFolderItem): string {
     </article>`;
 }
 
-function renderFolder(folder: { name: string }, items: (ClientFileEntry | ShareFolderItem)[]): void {
+function renderFolder(folder: { name: string }, items: (ClientFileEntry | ShareFolderItem | ShareArticleItem)[]): void {
   if (!root) return;
   document.title = `${folder.name} · volume`;
   root.innerHTML = `
@@ -123,9 +155,12 @@ async function init(): Promise<void> {
     } else {
       response = await fetch(`/api/meta/${encodeURIComponent(id)}`);
       if (!response.ok) return unavailable();
-      payload = { type: 'file', item: await response.json() as ClientFileEntry };
+      const item = await response.json() as ClientFileEntry | ShareArticleItem;
+      if (item.type === 'article') return unavailable();
+      payload = { type: 'file', item };
     }
     if (payload.type === 'folder') renderFolder(payload.item, payload.items);
+    else if (payload.type === 'article') renderArticle(payload.item);
     else renderFile(payload.item);
   } catch {
     unavailable();

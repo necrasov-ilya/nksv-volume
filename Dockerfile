@@ -10,7 +10,10 @@ COPY server.ts ./
 COPY src ./src
 COPY public ./public
 
-RUN npm run build:client && npm prune --omit=dev && npm cache clean --force
+COPY editor-app/package.json editor-app/package-lock.json* ./editor-app/
+RUN npm --prefix editor-app ci
+COPY editor-app ./editor-app
+RUN npm run build:client && npm --prefix editor-app run build && npm prune --omit=dev && npm cache clean --force
 
 RUN mkdir -p /app/data /app/uploads && chown -R node:node /app
 

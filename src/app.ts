@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { errorBoundary } from './middleware/errorBoundary.js';
 import authRoutes from './routes/authRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
+import articleRoutes from './routes/articleRoutes.js';
 import publicRoutes from './routes/publicRoutes.js';
 
 const app = express();
@@ -39,6 +40,7 @@ app.use(express.static(config.paths.public));
 
 app.use('/api', authRoutes);
 app.use('/api', fileRoutes);
+app.use('/api', articleRoutes);
 app.use('/', publicRoutes);
 
 app.use(errorBoundary);

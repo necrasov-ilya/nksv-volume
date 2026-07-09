@@ -3,13 +3,51 @@ import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
 import { findMeta, loadMeta } from '../utils/metaStore.js';
-import type { FileEntry, FolderEntry, MetaEntry } from '../types.js';
+import { loadArticleContent } from '../utils/articleStore.js';
+import { renderArticle } from '../utils/articleRender.js';
+import { sortKey } from '../utils/itemKind.js';
+import type { ArticleEntry, FileEntry, FolderEntry, MetaEntry } from '../types.js';
 
 const router = Router();
 
 function safeFile(entry: FileEntry): Omit<FileEntry, 'storedName'> {
   const { storedName: _storedName, ...safe } = entry;
   return safe;
+}
+
+function safeArticleShare(entry: ArticleEntry) {
+  return {
+    id: entry.id,
+    type: 'article' as const,
+    title: entry.title,
+    annotation: entry.annotation,
+    coverImage: entry.coverImage,
+    updatedAt: entry.updatedAt,
+  };
+}
+
+function isPublicItem(item: MetaEntry): boolean {
+  if (item.type === 'article') return item.status === 'published';
+  return true;
+}
+
+function publicItemCount(meta: MetaEntry[], folderId: string): number {
+  return meta.filter((child) => (child.folderId || null) === folderId && isPublicItem(child)).length;
+}
+
+function shareFolderItem(meta: MetaEntry[], item: MetaEntry) {
+  if (item.type === 'folder') {
+    return {
+      id: item.id,
+      type: 'folder' as const,
+      name: item.name,
+      itemCount: publicItemCount(meta, item.id),
+    };
+  }
+  if (item.type === 'article') {
+    return safeArticleShare(item);
+  }
+  return safeFile(item);
 }
 
 router.get('/api/config', (_req, res) => {
@@ -23,7 +61,8 @@ router.get('/api/config', (_req, res) => {
 router.get('/api/meta/:id', (req, res) => {
   const entry = findMeta(req.params.id);
   if (!entry || entry.type === 'folder') return res.status(404).json({ error: 'Not found' });
-  res.json(safeFile(entry));
+  if (entry.type === 'article') return res.json(safeArticleShare(entry));
+  return res.json(safeFile(entry));
 });
 
 router.get('/api/share/:id', (req, res) => {
@@ -31,39 +70,50 @@ router.get('/api/share/:id', (req, res) => {
   const entry = meta.find((item) => item.id === req.params.id);
   if (!entry) return res.status(404).json({ error: 'Not found' });
 
-  if (entry.type !== 'folder') {
+  if (entry.type === 'article') {
+    if (entry.status !== 'published') return res.status(404).json({ error: 'Not found' });
+    const content = loadArticleContent(entry.id);
+    const rendered = renderArticle(content);
+    return res.json({
+      type: 'article',
+      item: {
+        ...safeArticleShare(entry),
+        html: rendered.html,
+        headings: rendered.headings,
+      },
+    });
+  }
+
+  if (entry.type === 'file') {
     return res.json({ type: 'file', item: safeFile(entry) });
   }
 
   const items = meta
-    .filter((item) => (item.folderId || null) === entry.id)
-    .sort((a, b) => {
-      if (a.type === b.type) {
-        const left = (a.type === 'folder' ? a.name : a.originalName) || '';
-        const right = (b.type === 'folder' ? b.name : b.originalName) || '';
-        return left.localeCompare(right, 'ru');
-      }
-      return a.type === 'folder' ? -1 : 1;
+    .filter((item) => {
+      if ((item.folderId || null) !== entry.id) return false;
+      if (item.type === 'article') return item.status === 'published';
+      return true;
     })
-    .map((item) => (item.type === 'folder'
-      ? {
-          id: item.id,
-          type: 'folder' as const,
-          name: item.name,
-          itemCount: meta.filter((child) => (child.folderId || null) === item.id).length,
-        }
-      : safeFile(item)));
+    .sort((a, b) => {
+      if (a.type === b.type) return sortKey(a).localeCompare(sortKey(b), 'ru');
+      if (a.type === 'folder') return -1;
+      if (b.type === 'folder') return 1;
+      if (a.type === 'article') return -1;
+      if (b.type === 'article') return 1;
+      return 0;
+    })
+    .map((item) => shareFolderItem(meta, item));
 
   return res.json({
     type: 'folder',
-    item: { id: entry.id, type: 'folder' as const, name: entry.name },
+    item: { id: entry.id, type: 'folder' as const, name: (entry as FolderEntry).name },
     items,
   });
 });
 
 router.get('/r/:id', (req, res) => {
   const entry = findMeta(req.params.id);
-  if (!entry || entry.type === 'folder') return res.status(404).send('Not found');
+  if (!entry || entry.type !== 'file') return res.status(404).send('Not found');
   const filePath = path.join(config.paths.uploads, entry.storedName);
   if (!fs.existsSync(filePath)) return res.status(404).send('File missing');
   res.setHeader('Content-Type', entry.mimeType);
@@ -97,6 +147,12 @@ router.get('/r/:id', (req, res) => {
 
 router.get('/v/:id', (_req, res) => {
   res.sendFile(path.join(config.paths.public, 'viewer.html'));
+});
+
+router.get('/editor', (_req, res) => {
+  const built = path.join(config.paths.public, 'editor', 'index.html');
+  if (fs.existsSync(built)) return res.sendFile(built);
+  return res.sendFile(path.join(config.paths.public, 'editor.html'));
 });
 
 export default router;

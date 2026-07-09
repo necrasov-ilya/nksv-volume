@@ -1,0 +1,146 @@
+.admin-app {
+  --admin-toolbar-bg: #172033;
+  --admin-toolbar-fg: #ffffff;
+  --admin-tooltip-bg: var(--paper);
+  --admin-tooltip-fg: var(--ink);
+  --admin-placeholder: var(--ink-muted);
+}
+
+html[data-theme="dark"] .admin-app {
+  --admin-toolbar-bg: #141210;
+  --admin-toolbar-fg: #f0ede8;
+  --admin-tooltip-bg: #2f2d2a;
+  --admin-tooltip-fg: #f0ede8;
+  --admin-placeholder: #9a948a;
+  --admin-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) .admin-app {
+    --admin-toolbar-bg: #141210;
+    --admin-toolbar-fg: #f0ede8;
+    --admin-tooltip-bg: #2f2d2a;
+    --admin-tooltip-fg: #f0ede8;
+    --admin-placeholder: #9a948a;
+    --admin-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  }
+}
+
+.admin-editor {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.admin-app button:disabled {
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+  border-color: var(--admin-border);
+}
+
+.admin-field input:disabled,
+.admin-field textarea:disabled {
+  background: var(--admin-surface);
+  color: var(--admin-muted);
+}
+
+.tiptap-editor__content .ProseMirror {
+  color: var(--admin-ink);
+  caret-color: var(--admin-accent);
+}
+
+.tiptap-editor__content .ProseMirror p.is-editor-empty:first-child::before,
+.tiptap-editor__content .ProseMirror p.is-empty::before {
+  color: var(--admin-placeholder);
+  opacity: 1;
+}
+
+.tiptap-editor__content .ProseMirror ::selection {
+  background: color-mix(in srgb, var(--admin-accent) 28%, transparent);
+}
+
+.editor-bubble-toolbar {
+  background: var(--admin-toolbar-bg);
+  color: var(--admin-toolbar-fg);
+  border: 1px solid var(--admin-border-strong);
+}
+
+.editor-bubble-toolbar button {
+  background: transparent;
+  color: var(--admin-toolbar-fg);
+}
+
+.editor-bubble-toolbar button:hover,
+.editor-bubble-toolbar button.active {
+  border-color: var(--admin-accent);
+  background: var(--admin-accent);
+  color: #ffffff;
+}
+
+.editor-bubble-toolbar__divider {
+  background: color-mix(in srgb, var(--admin-toolbar-fg) 28%, transparent);
+}
+
+.editor-bubble-toolbar button[data-tip],
+.inline-insert__button[data-tip] {
+  position: relative;
+}
+
+.editor-bubble-toolbar button[data-tip]:hover::after,
+.inline-insert__button[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 40;
+  transform: translateX(-50%);
+  padding: 5px 8px;
+  border: 1px solid var(--admin-border-strong);
+  border-radius: 8px;
+  background: var(--admin-tooltip-bg);
+  color: var(--admin-tooltip-fg);
+  box-shadow: var(--admin-shadow);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.editor-bubble-toolbar--below button[data-tip]:hover::after {
+  bottom: auto;
+  top: calc(100% + 8px);
+}
+
+.inline-insert__menu {
+  box-shadow: var(--admin-shadow);
+}
+
+.inline-insert__menu button {
+  color: var(--admin-ink);
+}
+
+.editor-definition__term {
+  color: inherit;
+}
+
+.editor-key-idea .ProseMirror,
+.editor-exam-trap .ProseMirror {
+  color: inherit;
+}
+
+.editor-compare-table__caption,
+.editor-compare-table th input,
+.editor-compare-table td input {
+  background: var(--admin-surface);
+  color: var(--admin-ink);
+}
+
+.admin-cover-field__preview,
+.article-cover-hero {
+  border: 1px solid var(--admin-border);
+}
+
+.admin-status--published {
+  background: color-mix(in srgb, var(--admin-success) 14%, transparent);
+}

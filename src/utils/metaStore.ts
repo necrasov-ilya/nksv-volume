@@ -1,7 +1,7 @@
 import fs from 'fs';
 import { config } from '../config.js';
 import { normalizeFilename } from './filename.js';
-import type { MetaEntry, FileEntry, FolderEntry } from '../types.js';
+import type { MetaEntry, FileEntry, FolderEntry, ArticleEntry } from '../types.js';
 
 fs.mkdirSync(config.paths.uploads, { recursive: true });
 fs.mkdirSync(config.paths.data, { recursive: true });
@@ -59,6 +59,16 @@ export function getFoldersInFolder(folderId: string | null): FolderEntry[] {
   return loadMeta().filter(
     (f): f is FolderEntry => f.type === 'folder' && (f.folderId || null) === folderId,
   );
+}
+
+export function getArticlesInFolder(folderId: string | null): ArticleEntry[] {
+  return loadMeta().filter(
+    (f): f is ArticleEntry => f.type === 'article' && (f.folderId || null) === folderId,
+  );
+}
+
+export function getItemsInFolder(folderId: string | null): MetaEntry[] {
+  return loadMeta().filter((entry) => (entry.folderId || null) === folderId);
 }
 
 export function deleteFolderRecursive(id: string): MetaEntry[] {

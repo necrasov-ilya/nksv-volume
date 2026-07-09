@@ -1,5 +1,5 @@
 import { initLanding, logout } from './landing.js';
-import { initUpload } from './upload.js';
+import { initUpload, openFilePicker } from './upload.js';
 import { initFileList, loadFiles } from './fileList.js';
 import { getFolderId, setFolderId, showToast } from './config.js';
 import { api } from './api.js';
@@ -34,6 +34,17 @@ function closeFolderDialog(): void {
   if (dialog) dialog.close();
 }
 
+function closeAddMenu(): void {
+  const menu = document.getElementById('add-menu') as HTMLElement | null;
+  if (menu) menu.hidden = true;
+}
+
+function toggleAddMenu(): void {
+  const menu = document.getElementById('add-menu') as HTMLElement | null;
+  if (!menu) return;
+  menu.hidden = !menu.hidden;
+}
+
 async function createFolder(event: SubmitEvent): Promise<void> {
   event.preventDefault();
   const input = document.getElementById('folder-name') as HTMLInputElement | null;
@@ -55,15 +66,61 @@ async function createFolder(event: SubmitEvent): Promise<void> {
   }
 }
 
+async function createArticle(): Promise<void> {
+  closeAddMenu();
+  try {
+    const result = await api.createArticle(getFolderId());
+    showToast('Статья создана');
+    window.location.href = `/editor?id=${encodeURIComponent(result.article.id)}`;
+  } catch (error) {
+    showToast((error as Error).message);
+  }
+}
+
+function initAddMenu(): void {
+  const toggle = document.getElementById('btn-add') as HTMLButtonElement | null;
+  const menu = document.getElementById('add-menu') as HTMLElement | null;
+  const uploadItem = document.getElementById('add-upload') as HTMLButtonElement | null;
+  const folderItem = document.getElementById('add-folder') as HTMLButtonElement | null;
+  const articleItem = document.getElementById('add-article') as HTMLButtonElement | null;
+
+  toggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleAddMenu();
+  });
+
+  uploadItem?.addEventListener('click', () => {
+    closeAddMenu();
+    openFilePicker();
+  });
+
+  folderItem?.addEventListener('click', () => {
+    closeAddMenu();
+    openFolderDialog();
+  });
+
+  articleItem?.addEventListener('click', () => { void createArticle(); });
+
+  document.addEventListener('click', (event) => {
+    if (!menu || menu.hidden) return;
+    const target = event.target as Node;
+    if (toggle?.contains(target) || menu.contains(target)) return;
+    closeAddMenu();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeAddMenu();
+  });
+}
+
 function init(): void {
   initFileList(navigateTo);
   initUpload((uploadedId) => loadFiles(uploadedId));
   initLanding(showAdmin);
+  initAddMenu();
 
   const logoutBtn = document.getElementById('btn-logout') as HTMLButtonElement | null;
   if (logoutBtn) logoutBtn.addEventListener('click', () => { void logout(); });
-  const newFolderBtn = document.getElementById('btn-new-folder') as HTMLButtonElement | null;
-  if (newFolderBtn) newFolderBtn.addEventListener('click', openFolderDialog);
   const folderForm = document.getElementById('folder-form') as HTMLFormElement | null;
   if (folderForm) folderForm.addEventListener('submit', createFolder);
   const folderCancel = document.getElementById('folder-cancel') as HTMLButtonElement | null;

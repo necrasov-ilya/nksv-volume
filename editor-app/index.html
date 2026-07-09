@@ -3,29 +3,20 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>volume</title>
+  <title>Редактор · volume</title>
   <meta name="color-scheme" content="light dark">
   <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/vendor/tabler/tabler-icons.min.css">
   <link rel="stylesheet" href="/style.css">
 </head>
-<body class="public-page">
-  <main id="public-root">
-    <div class="public-error">
-      <i class="ti ti-loader-2" aria-hidden="true"></i>
-      <p>Загружаем…</p>
-    </div>
-  </main>
+<body>
+  <div id="root"></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div class="corner-actions">
-    <a class="github-link" href="https://github.com/necrasov-ilya/nksv-volume" target="_blank" rel="noopener noreferrer">
-      <i class="ti ti-brand-github" aria-hidden="true"></i>
-      GitHub
-    </a>
     <button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему" title="Сменить тему">
       <i class="ti ti-moon" aria-hidden="true"></i>
     </button>
   </div>
-  <script type="module" src="/js/viewer.js"></script>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

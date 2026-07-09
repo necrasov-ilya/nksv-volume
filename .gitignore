@@ -2,5 +2,9 @@ node_modules/
 uploads/
 data/
 .env
+.agents/
 public/js/admin.js
 public/js/viewer.js
+public/js/editor.js
+public/editor/
+editor-app/node_modules/

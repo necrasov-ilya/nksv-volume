@@ -30,6 +30,7 @@ interface AppConfig {
     root: string;
     uploads: string;
     data: string;
+    articles: string;
     metaFile: string;
     public: string;
   };
@@ -48,6 +49,7 @@ export const config: AppConfig = {
     root,
     uploads: path.join(root, 'uploads'),
     data: path.join(root, 'data'),
+    articles: path.join(root, 'data', 'articles'),
     metaFile: path.join(root, 'data', 'files.json'),
     public: path.join(root, 'public'),
   },

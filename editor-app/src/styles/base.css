@@ -1,0 +1,217 @@
+.admin-app {
+  --admin-bg: #f5f2eb;
+  --admin-surface: #fffdf8;
+  --admin-surface-strong: #ffffff;
+  --admin-ink: #172033;
+  --admin-muted: #64748b;
+  --admin-border: #ddd5ca;
+  --admin-border-strong: #cfc5b7;
+  --admin-accent: #ac2954;
+  --admin-accent-dark: #8f2044;
+  --admin-danger: #be123c;
+  --admin-success: #047857;
+  --admin-warning: #b45309;
+  --admin-shadow: 0 10px 24px rgba(31, 41, 55, 0.07);
+  min-height: 100vh;
+  background: var(--admin-bg);
+  color: var(--admin-ink);
+  font-family: var(--font-sans);
+}
+
+.admin-app *,
+.admin-app *::before,
+.admin-app *::after {
+  box-sizing: border-box;
+}
+
+.admin-app button,
+.admin-app select,
+.admin-app input,
+.admin-app textarea {
+  font: inherit;
+}
+
+.admin-app button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 9px 13px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: var(--admin-surface-strong);
+  color: var(--admin-ink);
+  font-weight: 760;
+  cursor: pointer;
+  box-shadow: none;
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    transform 0.16s ease;
+}
+
+.admin-app button:hover {
+  border-color: var(--admin-accent);
+  color: var(--admin-accent);
+}
+
+.admin-app button:disabled {
+  cursor: not-allowed;
+  border-color: var(--admin-border);
+  background: #ece7df;
+  color: #94a3b8;
+  transform: none;
+}
+
+.admin-button-primary {
+  border-color: var(--admin-accent) !important;
+  background: var(--admin-accent) !important;
+  color: #ffffff !important;
+}
+
+.admin-button-primary:hover {
+  border-color: var(--admin-accent-dark) !important;
+  background: var(--admin-accent-dark) !important;
+  color: #ffffff !important;
+}
+
+.admin-button-outline {
+  border-color: var(--admin-accent) !important;
+  background: var(--admin-surface-strong) !important;
+  color: var(--admin-accent) !important;
+}
+
+.admin-button-outline:hover {
+  background: var(--admin-accent) !important;
+  color: #ffffff !important;
+}
+
+.admin-button-ghost {
+  border-color: transparent !important;
+  background: var(--admin-surface-strong) !important;
+  color: var(--admin-muted) !important;
+}
+
+.admin-button-ghost:hover {
+  border-color: var(--admin-border-strong) !important;
+  color: var(--admin-accent) !important;
+}
+
+.admin-button-danger {
+  border-color: var(--admin-danger) !important;
+  background: var(--admin-surface-strong) !important;
+  color: var(--admin-danger) !important;
+}
+
+.admin-button-danger:hover {
+  background: var(--admin-danger) !important;
+  color: #ffffff !important;
+}
+
+.admin-button-danger--active {
+  border-color: var(--admin-danger) !important;
+  background: var(--admin-danger) !important;
+  color: #ffffff !important;
+}
+
+.admin-app button:focus-visible,
+.admin-app a:focus-visible,
+.admin-app input:focus-visible,
+.admin-app textarea:focus-visible,
+.admin-app select:focus-visible {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: 2px;
+}
+
+.admin-main {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.admin-loading,
+.admin-login,
+.admin-list,
+.admin-editor,
+.admin-uploads {
+  width: 100%;
+}
+
+.admin-editor,
+.admin-list {
+  padding-bottom: 28px;
+}
+
+.admin-loading {
+  color: var(--admin-muted);
+  font-weight: 780;
+}
+
+.admin-login {
+  display: grid;
+  min-height: 100vh;
+  padding: 24px;
+  place-items: center;
+}
+
+.admin-login-form {
+  display: grid;
+  gap: 14px;
+  width: min(380px, 100%);
+  padding: 22px;
+  border: 1px solid var(--admin-border);
+  border-radius: 18px;
+  background: var(--admin-surface-strong);
+  box-shadow: var(--admin-shadow);
+}
+
+.admin-login-form h1 {
+  margin: 0;
+  color: var(--admin-ink);
+  font-size: 1.35rem;
+  line-height: 1.15;
+}
+
+.admin-login-form input,
+.admin-field input,
+.admin-field textarea,
+.admin-field select,
+.admin-list-actions select,
+.admin-image-field select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-border);
+  border-radius: 12px;
+  background: var(--admin-surface-strong);
+  color: var(--admin-ink);
+  outline: none;
+}
+
+.admin-field textarea {
+  min-height: 94px;
+  resize: vertical;
+}
+
+.admin-login-form input:focus,
+.admin-field input:focus,
+.admin-field textarea:focus,
+.admin-field select:focus,
+.admin-list-actions select:focus,
+.admin-image-field select:focus {
+  border-color: var(--admin-accent);
+}
+
+.admin-login-error,
+.admin-error {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--admin-danger);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 760;
+}
+

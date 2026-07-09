@@ -1,5 +1,3 @@
-import type { ClientEntry } from './types.js';
-
 const toastTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
 
 export function getFolderId(): string | null {
@@ -42,19 +40,5 @@ export function formatDate(iso: string): string {
   return `${date.toLocaleDateString('ru-RU')} · ${time}`;
 }
 
-export function isImage(mime: string = ''): boolean { return mime.startsWith('image/'); }
-export function isVideo(mime: string = ''): boolean { return mime.startsWith('video/'); }
-export function isPdf(mime: string = ''): boolean { return mime === 'application/pdf'; }
-
-export function fileIcon(mime: string = ''): string {
-  if (isVideo(mime)) return 'ti-video';
-  if (isImage(mime)) return 'ti-photo';
-  if (isPdf(mime)) return 'ti-file-type-pdf';
-  return 'ti-file';
-}
-
-export function extensionLabel(item: ClientEntry): string {
-  if (item.type === 'folder') return 'Папка';
-  const name = item.originalName || '';
-  return name.includes('.') ? (name.split('.').pop() ?? '').toUpperCase() : 'Файл';
-}
+export { isImageMime as isImage, isVideoMime as isVideo, isPdfMime as isPdf } from './itemKind.js';
+export { resolveItemIcon as fileIcon, resolveItemLabel as extensionLabel } from './itemKind.js';

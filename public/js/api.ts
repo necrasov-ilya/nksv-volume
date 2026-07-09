@@ -1,7 +1,7 @@
 import type {
   AuthResponse, OkResponse, ServerConfig, FileListResponse,
   FolderListResponse, CreateFolderResponse, UploadResponse,
-  ClientFileEntry, ClientFolderEntry,
+  ClientFileEntry, ClientFolderEntry, CreateArticleResponse, ArticleResponse,
 } from './types.js';
 
 let legacyToken: string | null = null;
@@ -134,5 +134,27 @@ export const api = {
 
   deleteFolder(id: string): Promise<OkResponse & { deleted: number }> {
     return request(`/api/folders/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  createArticle(folderId: string | null, title = 'Без названия'): Promise<CreateArticleResponse> {
+    return request<CreateArticleResponse>('/api/articles', {
+      method: 'POST',
+      body: JSON.stringify({ title, folderId }),
+    });
+  },
+
+  getArticle(id: string): Promise<ArticleResponse> {
+    return request<ArticleResponse>(`/api/articles/${encodeURIComponent(id)}`);
+  },
+
+  updateArticle(id: string, payload: Record<string, unknown>): Promise<ArticleResponse> {
+    return request<ArticleResponse>(`/api/articles/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  deleteArticle(id: string): Promise<OkResponse> {
+    return request<OkResponse>(`/api/articles/${encodeURIComponent(id)}`, { method: 'DELETE' });
   },
 };

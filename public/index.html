@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light">
   <title>volume</title>
+  <meta name="color-scheme" content="light dark">
+  <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/vendor/tabler/tabler-icons.min.css">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -50,28 +51,39 @@
         </div>
 
         <div class="toolbar" aria-label="Действия с файлами">
-          <button class="primary-button" id="btn-upload" type="button">
-            <i class="ti ti-upload" aria-hidden="true"></i>
-            Загрузить
-          </button>
-          <button class="quiet-button" id="btn-paste" type="button">
-            <i class="ti ti-clipboard" aria-hidden="true"></i>
-            Вставить из буфера
-          </button>
-          <button class="quiet-button" id="btn-new-folder" type="button">
-            <i class="ti ti-folder-plus" aria-hidden="true"></i>
-            Новая папка
-          </button>
+          <div class="add-menu-wrap">
+            <button class="primary-button" id="btn-add" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="add-menu">
+              <i class="ti ti-plus" aria-hidden="true"></i>
+              Добавить
+              <i class="ti ti-chevron-down add-menu-chevron" aria-hidden="true"></i>
+            </button>
+            <div class="add-menu" id="add-menu" role="menu" hidden>
+              <button class="add-menu-item" id="add-upload" type="button" role="menuitem">
+                <i class="ti ti-upload" aria-hidden="true"></i>
+                <span>
+                  Загрузить файлы
+                  <small id="upload-limits">PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до 200 МБ</small>
+                </span>
+              </button>
+              <button class="add-menu-item" id="add-folder" type="button" role="menuitem">
+                <i class="ti ti-folder-plus" aria-hidden="true"></i>
+                <span>Новая папка</span>
+              </button>
+              <button class="add-menu-item" id="add-article" type="button" role="menuitem">
+                <i class="ti ti-article" aria-hidden="true"></i>
+                <span>Новая статья</span>
+              </button>
+            </div>
+          </div>
           <input type="file" id="file-input" multiple hidden>
         </div>
 
-        <section class="dropzone" id="dropzone" tabindex="0" aria-label="Область загрузки файлов">
-          <i class="ti ti-upload" aria-hidden="true"></i>
-          <div>
-            <p>Перетащите файлы сюда или нажмите «Загрузить»</p>
-            <p class="dropzone-hint" id="upload-limits">PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до 200 МБ</p>
+        <div class="drag-overlay" id="drag-overlay" hidden aria-hidden="true">
+          <div class="drag-overlay-inner">
+            <i class="ti ti-upload" aria-hidden="true"></i>
+            <p>Отпустите, чтобы загрузить</p>
           </div>
-        </section>
+        </div>
 
         <div class="upload-progress" id="upload-progress" hidden>
           <div class="progress-copy">
@@ -136,10 +148,15 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <a class="github-link" href="https://github.com/necrasov-ilya/nksv-volume" target="_blank" rel="noopener noreferrer">
-    <i class="ti ti-brand-github" aria-hidden="true"></i>
-    GitHub
-  </a>
+  <div class="corner-actions">
+    <a class="github-link" href="https://github.com/necrasov-ilya/nksv-volume" target="_blank" rel="noopener noreferrer">
+      <i class="ti ti-brand-github" aria-hidden="true"></i>
+      GitHub
+    </a>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="Сменить тему" title="Сменить тему">
+      <i class="ti ti-moon" aria-hidden="true"></i>
+    </button>
+  </div>
 
   <script type="module" src="/js/admin.js"></script>
 </body>

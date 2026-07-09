@@ -17,7 +17,20 @@ export interface ClientFolderEntry {
   itemCount?: number;
 }
 
-export type ClientEntry = ClientFileEntry | ClientFolderEntry;
+export interface ClientArticleEntry {
+  id: string;
+  type: 'article';
+  title: string;
+  annotation?: string;
+  tags?: string[];
+  coverImage?: string;
+  status: 'draft' | 'published';
+  folderId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ClientEntry = ClientFileEntry | ClientFolderEntry | ClientArticleEntry;
 
 export interface Breadcrumb {
   id: string;
@@ -33,6 +46,7 @@ export interface ServerConfig {
 export interface FileListResponse {
   folders: (ClientFolderEntry & { itemCount: number })[];
   files: ClientFileEntry[];
+  articles: ClientArticleEntry[];
   breadcrumbs: Breadcrumb[];
   storage: { usedBytes: number; limitBytes: number };
 }
@@ -70,10 +84,45 @@ export interface ShareFolderItem {
   itemCount: number;
 }
 
+export interface ShareArticleItem {
+  id: string;
+  type: 'article';
+  title: string;
+  annotation?: string;
+  coverImage?: string;
+  updatedAt: string;
+  html?: string;
+  headings?: { level: number; text: string; id: string }[];
+}
+
 export interface ShareFolderResponse {
   type: 'folder';
   item: { id: string; type: 'folder'; name: string };
-  items: (ClientFileEntry | ShareFolderItem)[];
+  items: (ClientFileEntry | ShareFolderItem | ShareArticleItem)[];
 }
 
-export type ShareResponse = ShareFileResponse | ShareFolderResponse;
+export interface ShareArticleResponse {
+  type: 'article';
+  item: ShareArticleItem & { html: string };
+}
+
+export type ShareResponse = ShareFileResponse | ShareFolderResponse | ShareArticleResponse;
+
+export interface ArticleContent {
+  content: Block[];
+}
+
+export interface Block {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: Block[];
+  text?: string;
+  marks?: { type: string; attrs?: Record<string, unknown> }[];
+}
+
+export interface ArticleResponse {
+  article: ClientArticleEntry;
+  content: ArticleContent;
+}
+
+export interface CreateArticleResponse extends ArticleResponse {}

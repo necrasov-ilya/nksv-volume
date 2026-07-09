@@ -9,7 +9,8 @@ import { normalizeFilename } from '../utils/filename.js';
 import {
   loadMeta, saveMeta, addMeta, findMeta, removeMeta, deleteFolderRecursive,
 } from '../utils/metaStore.js';
-import type { MetaEntry, FileEntry, FolderEntry } from '../types.js';
+import { deleteArticleContent } from '../utils/articleStore.js';
+import type { MetaEntry, FileEntry, FolderEntry, ArticleEntry } from '../types.js';
 
 const router = Router();
 
@@ -144,8 +145,12 @@ router.get('/files', authMiddleware, (req, res) => {
     }));
 
   const files = meta
-    .filter((f): f is FileEntry => f.type !== 'folder' && (f.folderId || null) === folderId)
+    .filter((f): f is FileEntry => f.type === 'file' && (f.folderId || null) === folderId)
     .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+
+  const articles = meta
+    .filter((f): f is ArticleEntry => f.type === 'article' && (f.folderId || null) === folderId)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 
   const breadcrumbs = buildBreadcrumbs(meta, folderId);
   const storage = {
@@ -153,7 +158,7 @@ router.get('/files', authMiddleware, (req, res) => {
     limitBytes: config.maxStorageGb * 1024 ** 3,
   };
 
-  res.json({ folders, files, breadcrumbs, storage });
+  res.json({ folders, files, articles, breadcrumbs, storage });
 });
 
 function buildBreadcrumbs(meta: MetaEntry[], folderId: string | null): { id: string; name: string }[] {
@@ -184,7 +189,7 @@ function buildFolderPath(meta: MetaEntry[], folder: FolderEntry): string {
 
 router.patch('/files/:id', authMiddleware, (req, res) => {
   const meta = loadMeta();
-  const entry = meta.find((item): item is FileEntry => item.id === req.params.id && item.type !== 'folder');
+  const entry = meta.find((item): item is FileEntry => item.id === req.params.id && item.type === 'file');
   if (!entry) return res.status(404).json({ error: 'Файл не найден' });
 
   if (Object.prototype.hasOwnProperty.call(req.body, 'folderId')) {
@@ -225,6 +230,7 @@ router.delete('/folders/:id', authMiddleware, (req, res) => {
       const filePath = path.join(config.paths.uploads, entry.storedName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
+    if (entry.type === 'article') deleteArticleContent(entry.id);
   }
   res.json({ ok: true, deleted: deleted.length });
 });

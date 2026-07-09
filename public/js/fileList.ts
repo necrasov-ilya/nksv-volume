@@ -1,11 +1,16 @@
 import { api } from './api.js';
 import {
-  escapeHtml, extensionLabel, fileIcon, formatDate, formatSize,
-  getFolderId, isImage, isPdf, isVideo, setFolderId, showToast,
+  escapeHtml, formatDate, formatSize,
+  getFolderId, setFolderId, showToast,
 } from './config.js';
+import {
+  entryDisplayName, resolveItemIcon, resolveItemLabel,
+  isImageMime, isVideoMime, isPdfMime,
+} from './itemKind.js';
+import { getUploadLimitsText } from './upload.js';
 import type {
-  ClientEntry, ClientFileEntry, ClientFolderEntry,
-  Breadcrumb, FileListResponse, FolderListResponse,
+  ClientEntry, ClientFileEntry, ClientFolderEntry, ClientArticleEntry,
+  Breadcrumb, FileListResponse,
 } from './types.js';
 
 let navigateCallback: ((folderId: string | null) => void) | null = null;
@@ -23,6 +28,10 @@ function itemCountLabel(count: number = 0): string {
 
 function shareUrl(id: string): string {
   return `${location.origin}/v/${id}`;
+}
+
+function articleStatusLabel(status: ClientArticleEntry['status']): string {
+  return status === 'published' ? 'Опубликована' : 'Черновик';
 }
 
 async function copyText(value: string, button: HTMLElement | null): Promise<void> {
@@ -74,25 +83,41 @@ function visualFor(item: ClientEntry): string {
   if (item.type === 'folder') {
     return '<div class="item-visual"><i class="ti ti-folder" aria-hidden="true"></i></div>';
   }
-  if (isImage(item.mimeType)) {
+  if (item.type === 'article') {
+    if (item.coverImage) {
+      return `<div class="item-visual media cover"><img src="${escapeHtml(item.coverImage)}" alt="" loading="lazy"></div>`;
+    }
+    return '<div class="item-visual"><i class="ti ti-article" aria-hidden="true"></i></div>';
+  }
+  if (isImageMime(item.mimeType)) {
     return `<div class="item-visual media"><img src="/r/${escapeHtml(item.id)}" alt="" loading="lazy"></div>`;
   }
-  if (isVideo(item.mimeType)) {
+  if (isVideoMime(item.mimeType)) {
     return `<div class="item-visual media"><video src="/r/${escapeHtml(item.id)}#t=0.1" muted preload="metadata" aria-hidden="true"></video></div>`;
   }
-  return `<div class="item-visual"><i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i></div>`;
+  return `<div class="item-visual"><i class="ti ${resolveItemIcon(item)}" aria-hidden="true"></i></div>`;
 }
 
 function menuFor(item: ClientEntry): string {
-  const openLabel = item.type === 'folder' ? 'Открыть папку' : 'Открыть файл';
-  const move = item.type === 'folder'
-    ? ''
-    : `<button type="button" data-action="move"><i class="ti ti-folder-symlink" aria-hidden="true"></i>Переместить</button>`;
-  const renameFile = item.type === 'folder'
-    ? ''
-    : `<button type="button" data-action="rename-file"><i class="ti ti-pencil" aria-hidden="true"></i>Переименовать</button>`;
+  const openLabel = item.type === 'folder'
+    ? 'Открыть папку'
+    : item.type === 'article'
+      ? 'Редактировать'
+      : 'Открыть файл';
+  const move = item.type === 'file'
+    ? `<button type="button" data-action="move"><i class="ti ti-folder-symlink" aria-hidden="true"></i>Переместить</button>`
+    : '';
+  const renameFile = item.type === 'file'
+    ? `<button type="button" data-action="rename-file"><i class="ti ti-pencil" aria-hidden="true"></i>Переименовать</button>`
+    : '';
   const rename = item.type === 'folder'
     ? `<button type="button" data-action="rename"><i class="ti ti-pencil" aria-hidden="true"></i>Переименовать</button>`
+    : '';
+  const publish = item.type === 'article' && item.status === 'draft'
+    ? `<button type="button" data-action="publish"><i class="ti ti-world" aria-hidden="true"></i>Опубликовать</button>`
+    : '';
+  const unpublish = item.type === 'article' && item.status === 'published'
+    ? `<button type="button" data-action="unpublish"><i class="ti ti-eye-off" aria-hidden="true"></i>Снять с публикации</button>`
     : '';
   return `
     <details class="row-menu">
@@ -102,9 +127,29 @@ function menuFor(item: ClientEntry): string {
         ${move}
         ${renameFile}
         ${rename}
+        ${publish}
+        ${unpublish}
         <button class="danger" type="button" data-action="delete"><i class="ti ti-trash" aria-hidden="true"></i>Удалить</button>
       </div>
     </details>`;
+}
+
+function itemMeta(item: ClientEntry): string {
+  if (item.type === 'folder') return itemCountLabel(item.itemCount);
+  if (item.type === 'article') {
+    return `${articleStatusLabel(item.status)} · ${formatDate(item.updatedAt)}`;
+  }
+  return `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
+}
+
+function renderEmptyState(): string {
+  return `
+    <div class="empty-list empty-state" data-drop-target>
+      <i class="ti ti-folder-open" aria-hidden="true"></i>
+      <p class="empty-state-title">Здесь пока пусто</p>
+      <p class="empty-state-lead">Перетащите файлы, вставьте из буфера (Ctrl+V) или нажмите «Добавить»</p>
+      <p class="empty-state-hint">${escapeHtml(getUploadLimitsText())}</p>
+    </div>`;
 }
 
 async function openMoveDialog(item: ClientFileEntry): Promise<void> {
@@ -161,33 +206,30 @@ async function submitMove(event: SubmitEvent): Promise<void> {
   }
 }
 
-function renderRows(folders: (ClientFolderEntry & { itemCount: number })[], files: ClientFileEntry[]): void {
+function renderRows(
+  folders: (ClientFolderEntry & { itemCount: number })[],
+  files: ClientFileEntry[],
+  articles: ClientArticleEntry[],
+): void {
   const list = document.getElementById('file-list') as HTMLElement | null;
   if (!list) return;
-  const items: ClientEntry[] = [...folders, ...files];
+  const items: ClientEntry[] = [...folders, ...articles, ...files];
   currentItems = new Map(items.map((item) => [item.id, item]));
 
   if (!items.length) {
     selectedId = null;
     renderDetail(null);
-    list.innerHTML = `
-      <div class="empty-list">
-        <i class="ti ti-folder-open" aria-hidden="true"></i>
-        Здесь пока пусто
-      </div>`;
+    list.innerHTML = renderEmptyState();
     return;
   }
 
   if (!currentItems.has(selectedId ?? '')) {
-    selectedId = files[0]?.id || folders[0]?.id || null;
+    selectedId = files[0]?.id || articles[0]?.id || folders[0]?.id || null;
   }
 
   list.innerHTML = items.map((item) => {
+    const name = entryDisplayName(item);
     const isFolder = item.type === 'folder';
-    const name = isFolder ? item.name : item.originalName;
-    const meta = isFolder
-      ? itemCountLabel(item.itemCount)
-      : `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
     return `
       <article class="file-row${item.id === selectedId ? ' selected' : ''}" data-id="${escapeHtml(item.id)}" data-type="${item.type}">
         ${visualFor(item)}
@@ -195,7 +237,7 @@ function renderRows(folders: (ClientFolderEntry & { itemCount: number })[], file
           ${isFolder
             ? `<button class="item-name" type="button" data-action="navigate">${escapeHtml(name)}</button>`
             : `<button class="item-name" type="button" data-action="select">${escapeHtml(name)}</button>`}
-          <p class="item-meta">${escapeHtml(meta)}</p>
+          <p class="item-meta">${escapeHtml(itemMeta(item))}</p>
         </div>
         <button class="row-action" type="button" data-action="copy" aria-label="Скопировать публичную ссылку">
           <i class="ti ti-copy" aria-hidden="true"></i>
@@ -209,11 +251,20 @@ function renderRows(folders: (ClientFolderEntry & { itemCount: number })[], file
 
 function previewFor(item: ClientEntry): string {
   if (item.type === 'folder') return '<i class="ti ti-folder" aria-hidden="true"></i>';
+  if (item.type === 'article') {
+    if (item.coverImage) {
+      return `<img src="${escapeHtml(item.coverImage)}" alt="${escapeHtml(item.title)}" class="detail-article-cover">`;
+    }
+    const note = item.annotation
+      ? `<p class="detail-annotation">${escapeHtml(item.annotation)}</p>`
+      : '';
+    return `<div class="detail-article-preview"><i class="ti ti-article" aria-hidden="true"></i>${note}</div>`;
+  }
   const raw = `/r/${encodeURIComponent(item.id)}`;
-  if (isImage(item.mimeType)) return `<img src="${raw}" alt="${escapeHtml(item.originalName)}">`;
-  if (isVideo(item.mimeType)) return `<video src="${raw}" controls preload="metadata"></video>`;
-  if (isPdf(item.mimeType)) return `<iframe src="${raw}" title="${escapeHtml(item.originalName)}"></iframe>`;
-  return `<i class="ti ${fileIcon(item.mimeType)}" aria-hidden="true"></i>`;
+  if (isImageMime(item.mimeType)) return `<img src="${raw}" alt="${escapeHtml(item.originalName)}">`;
+  if (isVideoMime(item.mimeType)) return `<video src="${raw}" controls preload="metadata"></video>`;
+  if (isPdfMime(item.mimeType)) return `<iframe src="${raw}" title="${escapeHtml(item.originalName)}"></iframe>`;
+  return `<i class="ti ${resolveItemIcon(item)}" aria-hidden="true"></i>`;
 }
 
 function renderDetail(item: ClientEntry | null): void {
@@ -223,17 +274,27 @@ function renderDetail(item: ClientEntry | null): void {
     panel.innerHTML = `
       <div class="detail-empty">
         <i class="ti ti-file" aria-hidden="true"></i>
-        <p>Выберите файл, чтобы посмотреть его и скопировать ссылку.</p>
+        <p>Выберите элемент, чтобы посмотреть его и скопировать ссылку.</p>
       </div>`;
     return;
   }
 
-  const isFolder = item.type === 'folder';
-  const name = isFolder ? item.name : item.originalName;
-  const meta = isFolder
+  const name = entryDisplayName(item);
+  const meta = item.type === 'folder'
     ? itemCountLabel(item.itemCount)
-    : `${formatSize(item.size)} · ${extensionLabel(item)}`;
+    : item.type === 'article'
+      ? `${articleStatusLabel(item.status)} · ${resolveItemLabel(item)}`
+      : `${formatSize(item.size)} · ${resolveItemLabel(item)}`;
   const url = shareUrl(item.id);
+  const editAction = item.type === 'article'
+    ? `<a class="detail-open" href="/editor?id=${encodeURIComponent(item.id)}">
+        <i class="ti ti-pencil" aria-hidden="true"></i>
+        Редактировать
+      </a>`
+    : `<a class="detail-open" href="/v/${encodeURIComponent(item.id)}" target="_blank" rel="noopener">
+        <i class="ti ti-external-link" aria-hidden="true"></i>
+        Открыть
+      </a>`;
   panel.innerHTML = `
     <h2 class="detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</h2>
     <div class="detail-preview">${previewFor(item)}</div>
@@ -249,10 +310,7 @@ function renderDetail(item: ClientEntry | null): void {
         <i class="ti ti-copy" aria-hidden="true"></i>
         Скопировать ссылку
       </button>
-      <a class="detail-open" href="/v/${encodeURIComponent(item.id)}" target="_blank" rel="noopener">
-        <i class="ti ti-external-link" aria-hidden="true"></i>
-        Открыть
-      </a>
+      ${editAction}
     </div>`;
 
   const copyBtn = document.getElementById('detail-copy') as HTMLButtonElement | null;
@@ -304,6 +362,7 @@ async function handleListClick(event: MouseEvent): Promise<void> {
   }
   if (action === 'open') {
     if (item.type === 'folder') navigateCallback?.(item.id);
+    else if (item.type === 'article') window.location.href = `/editor?id=${encodeURIComponent(item.id)}`;
     else window.open(`/v/${encodeURIComponent(item.id)}`, '_blank', 'noopener');
   }
   if (action === 'rename' && item.type === 'folder') {
@@ -314,13 +373,30 @@ async function handleListClick(event: MouseEvent): Promise<void> {
       await loadFiles(item.id);
     } catch (error) { showToast((error as Error).message); }
   }
+  if (action === 'publish' && item.type === 'article') {
+    try {
+      await api.updateArticle(item.id, { status: 'published' });
+      showToast('Статья опубликована');
+      await loadFiles(item.id);
+    } catch (error) { showToast((error as Error).message); }
+  }
+  if (action === 'unpublish' && item.type === 'article') {
+    try {
+      await api.updateArticle(item.id, { status: 'draft' });
+      showToast('Статья снята с публикации');
+      await loadFiles(item.id);
+    } catch (error) { showToast((error as Error).message); }
+  }
   if (action === 'delete') {
     const label = item.type === 'folder'
       ? `Удалить папку «${item.name}» вместе с содержимым?`
-      : `Удалить файл «${item.originalName}»?`;
+      : item.type === 'article'
+        ? `Удалить статью «${item.title}»?`
+        : `Удалить файл «${item.originalName}»?`;
     if (!window.confirm(label)) return;
     try {
       if (item.type === 'folder') await api.deleteFolder(item.id);
+      else if (item.type === 'article') await api.deleteArticle(item.id);
       else await api.deleteFile(item.id);
       if (selectedId === item.id) selectedId = null;
       showToast('Удалено');
@@ -365,7 +441,9 @@ export async function loadFiles(preferredId?: string | null): Promise<void> {
     if (labelEl) {
       labelEl.textContent = data.breadcrumbs.at(-1)?.name || 'Сегодня';
     }
-    renderRows(data.folders, data.files);
+    const limitsEl = document.getElementById('upload-limits') as HTMLElement | null;
+    if (limitsEl) limitsEl.textContent = getUploadLimitsText();
+    renderRows(data.folders, data.files, data.articles ?? []);
   } catch (error) {
     if ((error as ApiError).status === 401) return;
     if (list) {
