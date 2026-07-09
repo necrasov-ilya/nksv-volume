@@ -1,6 +1,8 @@
 import { UploadCloud, X } from 'lucide-react';
-import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type DragEvent } from 'react';
 import { COVER_RATIO_LABEL, COVER_SIZE_LABEL } from '../constants/cover.js';
+import { COVER_LABELS } from '../constants/i18n.js';
+import { useObjectURL } from '../hooks/useObjectURL.js';
 import type { ImageAsset } from '../types.js';
 import { CoverCropModal } from './CoverCropModal.js';
 
@@ -22,27 +24,13 @@ export function CoverImageField({
   value, images, uploading, compact = false, onChange, onUpload,
 }: CoverImageFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const cropSource = useCropSource(cropFile);
   const selected = images.find((image) => image.url === value);
-  const [cropSource, setCropSource] = useState<CropSource | null>(null);
-
-  useEffect(() => () => {
-    if (cropSource) URL.revokeObjectURL(cropSource.url);
-  }, [cropSource]);
-
-  const closeCrop = () => {
-    setCropSource((current) => {
-      if (current) URL.revokeObjectURL(current.url);
-      return null;
-    });
-  };
 
   const handleFile = (file?: File) => {
     if (!file || !file.type.startsWith('image/')) return;
-    const url = URL.createObjectURL(file);
-    setCropSource((current) => {
-      if (current) URL.revokeObjectURL(current.url);
-      return { url, name: file.name };
-    });
+    setCropFile(file);
   };
 
   const openFilePicker = () => {
@@ -71,7 +59,7 @@ export function CoverImageField({
             <button
               type="button"
               className="admin-cover-field__action"
-              aria-label={uploading ? 'Загрузка…' : 'Выбрать новую'}
+              aria-label={uploading ? COVER_LABELS.uploading : COVER_LABELS.chooseNew}
               onClick={openFilePicker}
               disabled={uploading}
             >
@@ -81,7 +69,7 @@ export function CoverImageField({
               <button
                 type="button"
                 className="admin-cover-field__action"
-                aria-label="Сбросить"
+                aria-label={COVER_LABELS.reset}
                 onClick={() => onChange('')}
               >
                 <X size={20} strokeWidth={2.25} />
@@ -89,21 +77,19 @@ export function CoverImageField({
             )}
           </div>
         </div>
-        {compact && (
-          <p className="admin-cover-field__spec">{coverSpec}</p>
-        )}
+        {compact && <p className="admin-cover-field__spec">{coverSpec}</p>}
         {!compact && (
           <div className="admin-cover-field__body">
-            <span className="admin-cover-field__label">Обложка</span>
+            <span className="admin-cover-field__label">{COVER_LABELS.cover}</span>
             <span className="admin-cover-field__hint">
-              Показывается в начале публичной статьи · {coverSpec}
+              {COVER_LABELS.coverHint.replace('{spec}', coverSpec)}
             </span>
             <span className="admin-cover-field__filename">
-              {selected?.filename || (value ? 'Текущее изображение' : 'Не выбрано')}
+              {selected?.filename || (value ? COVER_LABELS.currentImage : COVER_LABELS.notSelected)}
             </span>
             <select value={value} onChange={(event) => onChange(event.target.value)}>
-              <option value="">Выбрать из загрузок</option>
-              {value && !selected && <option value={value}>Текущее изображение</option>}
+              <option value="">{COVER_LABELS.selectFromUploads}</option>
+              {value && !selected && <option value={value}>{COVER_LABELS.currentImage}</option>}
               {images.map((image) => (
                 <option key={image.id} value={image.url}>{image.filename}</option>
               ))}
@@ -116,12 +102,12 @@ export function CoverImageField({
                 disabled={uploading}
               >
                 <UploadCloud size={15} />
-                {uploading ? 'Загрузка…' : 'Загрузить'}
+                {uploading ? COVER_LABELS.uploading : COVER_LABELS.upload}
               </button>
               {value && (
                 <button type="button" className="admin-button-ghost" onClick={() => onChange('')}>
                   <X size={15} />
-                  Сбросить
+                  {COVER_LABELS.reset}
                 </button>
               )}
             </div>
@@ -142,13 +128,19 @@ export function CoverImageField({
         <CoverCropModal
           imageUrl={cropSource.url}
           fileName={cropSource.name}
-          onCancel={closeCrop}
+          onCancel={() => setCropFile(null)}
           onConfirm={(file) => {
-            closeCrop();
+            setCropFile(null);
             onUpload(file);
           }}
         />
       )}
     </>
   );
+}
+
+function useCropSource(file: File | null): CropSource | null {
+  const url = useObjectURL(file);
+  if (!file || !url) return null;
+  return { url, name: file.name };
 }

@@ -1,3 +1,4 @@
+import { strings } from './constants/i18n.js';
 import type { ClientEntry } from './types.js';
 
 export type ItemKind = 'folder' | 'image' | 'video' | 'pdf' | 'text' | 'article' | 'file';
@@ -20,11 +21,11 @@ export function resolveItemKind(entry: ClientEntry): ItemKind {
 }
 
 export function resolveItemLabel(entry: ClientEntry): string {
-  if (entry.type === 'folder') return 'Папка';
-  if (entry.type === 'article') return 'Статья';
+  if (entry.type === 'folder') return strings.itemKinds.folder;
+  if (entry.type === 'article') return strings.itemKinds.article;
   const name = entry.originalName || '';
   if (name.includes('.')) return (name.split('.').pop() ?? '').toUpperCase();
-  return 'Файл';
+  return strings.itemKinds.file;
 }
 
 export function resolveItemIcon(entry: ClientEntry): string {

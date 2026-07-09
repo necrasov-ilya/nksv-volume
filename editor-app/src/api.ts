@@ -1,3 +1,11 @@
+import {
+  API_ARTICLE,
+  API_ARTICLE_ASSETS_IMAGES,
+  API_AUTH_SESSION,
+  API_UPLOAD,
+  PUBLIC_FILE_ROUTE,
+} from './constants/api.js';
+import { API_ERROR_MESSAGES } from './constants/i18n.js';
 import type { ArticleContent, ArticleResponse, ImageAsset } from './types';
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -8,13 +16,13 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { error?: string };
-    throw new Error(payload.error || 'Не удалось выполнить запрос');
+    throw new Error(payload.error || API_ERROR_MESSAGES.requestFailed);
   }
   return await response.json() as T;
 }
 
 export async function session(): Promise<void> {
-  await request('/api/auth/session');
+  await request(API_AUTH_SESSION);
 }
 
 export function getArticleId(): string {
@@ -22,7 +30,7 @@ export function getArticleId(): string {
 }
 
 export function getArticle(id: string): Promise<ArticleResponse> {
-  return request<ArticleResponse>(`/api/articles/${encodeURIComponent(id)}`);
+  return request<ArticleResponse>(API_ARTICLE(id));
 }
 
 export function updateArticle(
@@ -36,14 +44,14 @@ export function updateArticle(
     content?: ArticleContent;
   },
 ): Promise<ArticleResponse> {
-  return request<ArticleResponse>(`/api/articles/${encodeURIComponent(id)}`, {
+  return request<ArticleResponse>(API_ARTICLE(id), {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
 
 export function listImages(): Promise<{ images: ImageAsset[] }> {
-  return request('/api/articles/assets/images');
+  return request(API_ARTICLE_ASSETS_IMAGES);
 }
 
 export function uploadImage(file: File): Promise<ImageAsset> {
@@ -51,7 +59,7 @@ export function uploadImage(file: File): Promise<ImageAsset> {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('files', file);
-    xhr.open('POST', '/api/upload');
+    xhr.open('POST', API_UPLOAD);
     xhr.withCredentials = true;
     xhr.onload = () => {
       try {
@@ -61,16 +69,16 @@ export function uploadImage(file: File): Promise<ImageAsset> {
           resolve({
             id: uploaded.id,
             filename: uploaded.originalName,
-            url: `/r/${uploaded.id}`,
+            url: PUBLIC_FILE_ROUTE(uploaded.id),
           });
           return;
         }
-        reject(new Error(payload.error || 'Не удалось загрузить изображение'));
+        reject(new Error(payload.error || API_ERROR_MESSAGES.imageUploadFailed));
       } catch {
-        reject(new Error('Не удалось загрузить изображение'));
+        reject(new Error(API_ERROR_MESSAGES.imageUploadFailed));
       }
     };
-    xhr.onerror = () => reject(new Error('Нет соединения с сервером'));
+    xhr.onerror = () => reject(new Error(API_ERROR_MESSAGES.noServerConnection));
     xhr.send(formData);
   });
 }

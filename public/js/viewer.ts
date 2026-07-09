@@ -1,50 +1,39 @@
-import {
-  escapeHtml, formatDate, formatSize, showToast,
-} from './config.js';
+import { formatDate, formatSize } from './format.js';
+import { showToast } from './toast.js';
 import { resolveItemIcon } from './itemKind.js';
+import { escapeHtml } from './html.js';
+import {
+  API_META, API_SHARE, PUBLIC_FILE_ROUTE, PUBLIC_VIEW_ROUTE,
+} from './constants/routes.js';
+import { APP_TITLE_SUFFIX } from './constants/ui.js';
+import { copyButton, DEFAULT_PUBLIC_DURATION } from './copyButton.js';
+import { strings, pluralObjects } from './constants/i18n.js';
 import type {
-  ClientFileEntry, ShareResponse, ShareFolderItem, ShareArticleItem,
+  ClientFileEntry, ShareArticleItem, ShareFolderItem, ShareResponse,
 } from './types.js';
+
+type ShareItem = ClientFileEntry | ShareFolderItem | ShareArticleItem;
 
 const root = document.getElementById('public-root') as HTMLElement | null;
 const id = location.pathname.split('/').filter(Boolean).pop() ?? '';
 
-function unavailable(): void {
+function setDocumentTitle(value: string): void {
+  document.title = `${value} ${strings.common.separator} ${APP_TITLE_SUFFIX}`;
+}
+
+function renderUnavailable(): void {
   if (!root) return;
-  document.title = 'Ничего не отправили · volume';
+  setDocumentTitle(strings.viewer.unavailable.title);
   root.innerHTML = `
     <section class="public-error">
       <i class="ti ti-inbox" aria-hidden="true"></i>
-      <h1>Привет!</h1>
-      <p>Тебе пока ничего не отправили. Возможно, ссылка устарела или в ней есть ошибка.</p>
+      <h1>${escapeHtml(strings.viewer.unavailable.hello)}</h1>
+      <p>${escapeHtml(strings.viewer.unavailable.message)}</p>
     </section>`;
 }
 
-function copyButtonHtml(): string {
-  return `
-    <button class="primary-button public-copy-button" id="copy-public-link" type="button" aria-label="Скопировать ссылку">
-      <i class="ti ti-copy" aria-hidden="true"></i>
-      <span class="public-copy-button__label">Скопировать ссылку</span>
-    </button>`;
-}
-
-async function copyCurrentLink(button: HTMLButtonElement): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(location.href);
-    button.classList.add('copied');
-    button.innerHTML = '<i class="ti ti-check" aria-hidden="true"></i><span class="public-copy-button__label">Скопировано</span>';
-    showToast('Ссылка скопирована');
-    setTimeout(() => {
-      button.classList.remove('copied');
-      button.innerHTML = '<i class="ti ti-copy" aria-hidden="true"></i><span class="public-copy-button__label">Скопировать ссылку</span>';
-    }, 1400);
-  } catch {
-    window.prompt('Скопируйте ссылку:', location.href);
-  }
-}
-
 function mediaFor(file: ClientFileEntry): string {
-  const raw = `/r/${encodeURIComponent(file.id)}`;
+  const raw = PUBLIC_FILE_ROUTE(file.id);
   if (file.mimeType.startsWith('video/')) {
     return `<video controls preload="metadata"><source src="${raw}" type="${escapeHtml(file.mimeType)}"></video>`;
   }
@@ -52,14 +41,14 @@ function mediaFor(file: ClientFileEntry): string {
     return `<img src="${raw}" alt="${escapeHtml(file.originalName)}">`;
   }
   if (file.mimeType === 'application/pdf') {
-    return `<iframe src="${raw}" title="${escapeHtml(file.originalName)}"></iframe>`;
+    return `<iframe src="${raw}" title="${escapeHtml(file.originalName)}" sandbox></iframe>`;
   }
-  return `<a class="primary-button" href="${raw}" download><i class="ti ti-download" aria-hidden="true"></i>Скачать файл</a>`;
+  return `<a class="primary-button" href="${raw}" download><i class="ti ti-download" aria-hidden="true"></i>${escapeHtml(strings.viewer.download)}</a>`;
 }
 
 function renderFile(file: ClientFileEntry): void {
   if (!root) return;
-  document.title = `${file.originalName} · volume`;
+  setDocumentTitle(file.originalName);
   const mediaKind = file.mimeType.startsWith('video/') ? ' is-video' : '';
   root.innerHTML = `
     <section class="public-content public-file-content">
@@ -69,19 +58,27 @@ function renderFile(file: ClientFileEntry): void {
       <div class="public-media${mediaKind}">${mediaFor(file)}</div>
       <div class="public-file-footer">
         <p class="public-subtitle">${escapeHtml(formatSize(file.size))} · ${escapeHtml(formatDate(file.uploadedAt))}</p>
-        ${copyButtonHtml()}
+        <div class="public-copy-slot" data-copy-value="${escapeHtml(location.href)}"></div>
       </div>
     </section>`;
-  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
-  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
+  const slot = root.querySelector<HTMLElement>('.public-copy-slot');
+  if (slot) {
+    copyButton(slot, {
+      durationMs: DEFAULT_PUBLIC_DURATION,
+      idleLabel: strings.viewer.copy.copyLink,
+      copiedLabel: strings.viewer.copy.copied,
+      promptFallback: strings.viewer.copy.copyPrompt,
+      onCopied: () => showToast(strings.viewer.copy.linkCopied),
+    });
+  }
 }
 
 function renderArticle(item: ShareArticleItem & { html: string }): void {
   if (!root) return;
-  document.title = `${item.title} · volume`;
+  setDocumentTitle(item.title);
   const subtitle = item.annotation
     ? `<p class="public-subtitle">${escapeHtml(item.annotation)}</p>`
-    : `<p class="public-subtitle">Статья · ${escapeHtml(formatDate(item.updatedAt))}</p>`;
+    : `<p class="public-subtitle">${escapeHtml(strings.viewer.articleLabel)}${strings.common.separator}${escapeHtml(formatDate(item.updatedAt))}</p>`;
   const cover = item.coverImage
     ? `<div class="public-article-cover"><img src="${escapeHtml(item.coverImage)}" alt=""></div>`
     : '';
@@ -93,77 +90,110 @@ function renderArticle(item: ShareArticleItem & { html: string }): void {
           <h1>${escapeHtml(item.title)}</h1>
           ${subtitle}
         </div>
-        ${copyButtonHtml()}
+        <div class="public-copy-slot" data-copy-value="${escapeHtml(location.href)}"></div>
       </div>
       <div class="article-body">${item.html}</div>
     </section>`;
-  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
-  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
+  const slot = root.querySelector<HTMLElement>('.public-copy-slot');
+  if (slot) {
+    copyButton(slot, {
+      durationMs: DEFAULT_PUBLIC_DURATION,
+      idleLabel: strings.viewer.copy.copyLink,
+      copiedLabel: strings.viewer.copy.copied,
+      promptFallback: strings.viewer.copy.copyPrompt,
+      onCopied: () => showToast(strings.viewer.copy.linkCopied),
+    });
+  }
 }
 
-function folderRow(item: ClientFileEntry | ShareFolderItem | ShareArticleItem): string {
-  const isFolder = item.type === 'folder';
-  const isArticle = item.type === 'article';
-  const name = isFolder ? item.name : isArticle ? item.title : item.originalName;
-  const meta = isFolder
-    ? `${item.itemCount || 0} объектов`
-    : isArticle
-      ? `Статья · ${formatDate(item.updatedAt)}`
-      : `${formatSize(item.size)} · ${formatDate(item.uploadedAt)}`;
-  const icon = isFolder ? 'ti-folder' : isArticle ? 'ti-article' : resolveItemIcon(item);
+function itemName(item: ShareItem): string {
+  if (item.type === 'folder') return item.name;
+  if (item.type === 'article') return item.title;
+  return item.originalName;
+}
+
+function itemMeta(item: ShareItem): string {
+  if (item.type === 'folder') return pluralObjects(item.itemCount || 0);
+  if (item.type === 'article') {
+    return `${strings.viewer.articleLabel}${strings.common.separator}${formatDate(item.updatedAt)}`;
+  }
+  return `${formatSize(item.size)}${strings.common.separator}${formatDate(item.uploadedAt)}`;
+}
+
+function itemIcon(item: ShareItem): string {
+  if (item.type === 'folder') return 'ti-folder';
+  if (item.type === 'article') return 'ti-article';
+  return resolveItemIcon(item);
+}
+
+function folderRow(item: ShareItem): string {
+  const name = itemName(item);
+  const href = PUBLIC_VIEW_ROUTE(item.id);
   return `
     <article class="public-row">
-      <i class="ti ${icon}" aria-hidden="true"></i>
+      <i class="ti ${itemIcon(item)}" aria-hidden="true"></i>
       <div>
-        <a href="/v/${encodeURIComponent(item.id)}">${escapeHtml(name)}</a>
-        <p>${escapeHtml(meta)}</p>
+        <a href="${href}">${escapeHtml(name)}</a>
+        <p>${escapeHtml(itemMeta(item))}</p>
       </div>
-      <a class="row-action" href="/v/${encodeURIComponent(item.id)}" aria-label="Открыть ${escapeHtml(name)}">
+      <a class="row-action" href="${href}" aria-label="${escapeHtml(strings.viewer.folder.openAriaLabelPrefix)}${escapeHtml(name)}">
         <i class="ti ti-chevron-right" aria-hidden="true"></i>
       </a>
     </article>`;
 }
 
-function renderFolder(folder: { name: string }, items: (ClientFileEntry | ShareFolderItem | ShareArticleItem)[]): void {
+function renderFolder(folder: { name: string }, items: ShareItem[]): void {
   if (!root) return;
-  document.title = `${folder.name} · volume`;
+  setDocumentTitle(folder.name);
   root.innerHTML = `
     <section class="public-content">
       <div class="public-heading">
         <div>
           <h1>${escapeHtml(folder.name)}</h1>
-          <p class="public-subtitle">Общая папка · ${items.length} объектов</p>
+          <p class="public-subtitle">${escapeHtml(strings.viewer.folder.sharedFolder)}${strings.common.separator}${escapeHtml(pluralObjects(items.length))}</p>
         </div>
-        ${copyButtonHtml()}
+        <div class="public-copy-slot" data-copy-value="${escapeHtml(location.href)}"></div>
       </div>
       ${items.length
         ? `<div class="public-list">${items.map(folderRow).join('')}</div>`
-        : '<div class="empty-list"><i class="ti ti-folder-open" aria-hidden="true"></i>В этой папке пока пусто</div>'}
+        : `<div class="empty-list"><i class="ti ti-folder-open" aria-hidden="true"></i>${escapeHtml(strings.viewer.folder.empty)}</div>`}
     </section>`;
-  const copyBtn = document.getElementById('copy-public-link') as HTMLButtonElement | null;
-  if (copyBtn) copyBtn.addEventListener('click', (event) => copyCurrentLink(event.currentTarget as HTMLButtonElement));
+  const slot = root.querySelector<HTMLElement>('.public-copy-slot');
+  if (slot) {
+    copyButton(slot, {
+      durationMs: DEFAULT_PUBLIC_DURATION,
+      idleLabel: strings.viewer.copy.copyLink,
+      copiedLabel: strings.viewer.copy.copied,
+      promptFallback: strings.viewer.copy.copyPrompt,
+      onCopied: () => showToast(strings.viewer.copy.linkCopied),
+    });
+  }
+}
+
+async function fetchShare(): Promise<ShareResponse | null> {
+  try {
+    const response = await fetch(API_SHARE(id));
+    if (response.ok) return await response.json() as ShareResponse;
+  } catch { /* fall through to meta */ }
+
+  try {
+    const response = await fetch(API_META(id));
+    if (!response.ok) return null;
+    const item = await response.json() as ClientFileEntry | ShareArticleItem;
+    if (item.type === 'article') return null;
+    return { type: 'file', item };
+  } catch {
+    return null;
+  }
 }
 
 async function init(): Promise<void> {
   if (!root) return;
-  try {
-    let response = await fetch(`/api/share/${encodeURIComponent(id)}`);
-    let payload: ShareResponse;
-    if (response.ok) {
-      payload = await response.json() as ShareResponse;
-    } else {
-      response = await fetch(`/api/meta/${encodeURIComponent(id)}`);
-      if (!response.ok) return unavailable();
-      const item = await response.json() as ClientFileEntry | ShareArticleItem;
-      if (item.type === 'article') return unavailable();
-      payload = { type: 'file', item };
-    }
-    if (payload.type === 'folder') renderFolder(payload.item, payload.items);
-    else if (payload.type === 'article') renderArticle(payload.item);
-    else renderFile(payload.item);
-  } catch {
-    unavailable();
-  }
+  const payload = await fetchShare();
+  if (!payload) return renderUnavailable();
+  if (payload.type === 'folder') renderFolder(payload.item, payload.items);
+  else if (payload.type === 'article') renderArticle(payload.item);
+  else renderFile(payload.item);
 }
 
 init();

@@ -1,58 +1,66 @@
-import { api } from './api.js';
-import { getFolderId, showToast } from './config.js';
+import { api, ApiError } from './api.js';
+import { showToast } from './toast.js';
+import { getFolderId } from './folderState.js';
+import { strings, pluralFilesUploaded } from './constants/i18n.js';
+import { ALLOWED_UPLOAD_MIME_TYPES, DEFAULT_MAX_FILE_SIZE_MB } from './constants/upload.js';
 
-const allowedTypes = new Set([
-  'video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska',
-  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
-  'application/pdf',
-]);
+type AfterUploadCallback = (id?: string) => void;
 
-let maxFileSizeMb = 200;
-let afterUpload: ((id?: string) => void) | null = null;
+interface UploadRuntime {
+  maxFileSizeMb: number;
+  allowedTypes: Set<string>;
+  afterUpload: AfterUploadCallback | null;
+}
+
+const runtime: UploadRuntime = {
+  maxFileSizeMb: DEFAULT_MAX_FILE_SIZE_MB,
+  allowedTypes: new Set<string>(ALLOWED_UPLOAD_MIME_TYPES),
+  afterUpload: null,
+};
+
 let dragDepth = 0;
 
-function setProgress(percent: number, label: string = 'Загрузка…'): void {
-  const progress = document.getElementById('upload-progress') as HTMLElement | null;
+function setProgress(percent: number, label: string = strings.upload.uploading): void {
+  const progress = document.getElementById('upload-progress');
   if (!progress) return;
   progress.hidden = false;
-  const labelEl = document.getElementById('progress-label') as HTMLElement | null;
-  const valueEl = document.getElementById('progress-value') as HTMLElement | null;
-  const fillEl = document.getElementById('progress-fill') as HTMLElement | null;
+  const labelEl = document.getElementById('progress-label');
+  const valueEl = document.getElementById('progress-value');
+  const fillEl = document.getElementById('progress-fill');
   if (labelEl) labelEl.textContent = label;
   if (valueEl) valueEl.textContent = `${percent}%`;
   if (fillEl) fillEl.style.width = `${percent}%`;
 }
 
 function hideProgress(): void {
-  const progress = document.getElementById('upload-progress') as HTMLElement | null;
-  const fillEl = document.getElementById('progress-fill') as HTMLElement | null;
+  const progress = document.getElementById('upload-progress');
+  const fillEl = document.getElementById('progress-fill');
   if (progress) progress.hidden = true;
   if (fillEl) fillEl.style.width = '0%';
 }
 
-function validateFiles(files: File[]): void {
-  const maxBytes = maxFileSizeMb * 1024 * 1024;
-  for (const file of files) {
-    if (!allowedTypes.has(file.type)) {
-      throw new Error(`Формат «${file.name}» не поддерживается`);
-    }
-    if (file.size > maxBytes) {
-      throw new Error(`«${file.name}» больше ${maxFileSizeMb} МБ`);
-    }
-  }
+function setDragOverlay(active: boolean): void {
+  const overlay = document.getElementById('drag-overlay');
+  if (overlay) overlay.hidden = !active;
 }
 
 function isFileDrag(event: DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
 }
 
-function setDragOverlay(active: boolean): void {
-  const overlay = document.getElementById('drag-overlay') as HTMLElement | null;
-  if (overlay) overlay.hidden = !active;
+function validateFiles(files: File[]): void {
+  const maxBytes = runtime.maxFileSizeMb * 1024 * 1024;
+  for (const file of files) {
+    if (!runtime.allowedTypes.has(file.type)) {
+      throw new Error(strings.upload.unsupportedFormat(file.name));
+    }
+    if (file.size > maxBytes) {
+      throw new Error(strings.upload.tooLarge(file.name, runtime.maxFileSizeMb));
+    }
+  }
 }
 
-async function uploadFiles(fileList: FileList | File[] | null): Promise<void> {
-  const files = Array.from(fileList || []);
+async function uploadFiles(files: File[]): Promise<void> {
   if (!files.length) return;
 
   try {
@@ -63,43 +71,28 @@ async function uploadFiles(fileList: FileList | File[] | null): Promise<void> {
   }
 
   const formData = new FormData();
-  files.forEach((file) => formData.append('files', file));
+  for (const file of files) formData.append('files', file);
   const folderId = getFolderId();
   if (folderId) formData.append('folderId', folderId);
 
-  const label = files.length === 1 ? files[0].name : `Файлов: ${files.length}`;
+  const label = files.length === 1 ? files[0].name : strings.upload.filesCountLabel(files.length);
   setProgress(0, label);
   try {
     const result = await api.upload(formData, (percent) => setProgress(percent, label));
-    showToast(files.length === 1 ? 'Файл загружен' : `Загружено файлов: ${files.length}`);
-    afterUpload?.(result.files?.[0]?.id);
+    showToast(pluralFilesUploaded(files.length));
+    runtime.afterUpload?.(result.files?.[0]?.id);
   } catch (error) {
-    showToast((error as Error).message);
+    if (error instanceof ApiError) {
+      showToast(error.message);
+    } else {
+      showToast((error as Error).message);
+    }
   } finally {
     hideProgress();
   }
 }
 
-export function openFilePicker(): void {
-  const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
-  fileInput?.click();
-}
-
-export function getUploadLimitsText(): string {
-  return `PNG, JPG, WebP, GIF, PDF, MP4, WebM, MKV · до ${maxFileSizeMb} МБ`;
-}
-
-export async function initUpload(uploadedCallback: (id?: string) => void): Promise<void> {
-  afterUpload = uploadedCallback;
-  const workspace = document.querySelector('.workspace') as HTMLElement | null;
-  const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
-  if (!workspace || !fileInput) return;
-
-  try {
-    const serverConfig = await api.config();
-    maxFileSizeMb = serverConfig.maxFileSizeMb;
-  } catch { /* fallback */ }
-
+function initDragAndDrop(workspace: HTMLElement): void {
   workspace.addEventListener('dragenter', (event) => {
     if (!isFileDrag(event)) return;
     event.preventDefault();
@@ -124,22 +117,57 @@ export async function initUpload(uploadedCallback: (id?: string) => void): Promi
     event.preventDefault();
     dragDepth = 0;
     setDragOverlay(false);
-    if (event.dataTransfer?.files.length) uploadFiles(event.dataTransfer.files);
+    const files = event.dataTransfer?.files;
+    if (files?.length) uploadFiles(Array.from(files));
   });
+}
 
+function initFileInput(fileInput: HTMLInputElement): void {
   fileInput.addEventListener('change', () => {
-    uploadFiles(fileInput.files);
+    if (fileInput.files?.length) uploadFiles(Array.from(fileInput.files));
     fileInput.value = '';
   });
+}
 
+function initPasteUpload(): void {
   document.addEventListener('paste', (event) => {
-    const admin = document.getElementById('admin') as HTMLElement | null;
+    const admin = document.getElementById('admin');
     const adminVisible = admin ? !admin.hidden : false;
-    const editing = document.activeElement instanceof HTMLInputElement
-      || document.activeElement instanceof HTMLTextAreaElement
-      || (document.activeElement as HTMLElement | null)?.isContentEditable;
+    const target = document.activeElement as HTMLElement | null;
+    const editing = target instanceof HTMLInputElement
+      || target instanceof HTMLTextAreaElement
+      || !!target?.isContentEditable;
     if (!adminVisible || editing || !event.clipboardData?.files.length) return;
     event.preventDefault();
-    uploadFiles(event.clipboardData.files);
+    uploadFiles(Array.from(event.clipboardData.files));
   });
+}
+
+async function loadServerConfig(): Promise<void> {
+  try {
+    const config = await api.config();
+    runtime.maxFileSizeMb = config.maxFileSizeMb;
+    runtime.allowedTypes = new Set<string>(ALLOWED_UPLOAD_MIME_TYPES);
+  } catch { /* keep defaults */ }
+}
+
+export function openFilePicker(): void {
+  document.getElementById('file-input')?.click();
+}
+
+export function getUploadLimitsText(): string {
+  return strings.upload.limitsLabel(runtime.maxFileSizeMb);
+}
+
+export async function initUpload(afterUpload: AfterUploadCallback): Promise<void> {
+  runtime.afterUpload = afterUpload;
+  const workspace = document.querySelector<HTMLElement>('.workspace');
+  const fileInput = document.getElementById('file-input') as HTMLInputElement | null;
+  if (!workspace || !fileInput) return;
+
+  await loadServerConfig();
+
+  initDragAndDrop(workspace);
+  initFileInput(fileInput);
+  initPasteUpload();
 }

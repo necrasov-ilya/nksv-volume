@@ -1,5 +1,11 @@
 import { api } from './api.js';
 import { setFolderId, showToast } from './config.js';
+import {
+  AUTH_KEYBOARD_SHORTCUT,
+  SECRET_CLICK_THRESHOLD,
+  SECRET_CLICK_WINDOW_MS,
+} from './constants/auth.js';
+import { strings } from './constants/i18n.js';
 
 let onAuthSuccess: (() => void) | null = null;
 let secretClicks = 0;
@@ -63,8 +69,8 @@ export function initLanding(successCallback: () => void): void {
     secret.addEventListener('click', () => {
       secretClicks += 1;
       if (secretTimer) clearTimeout(secretTimer);
-      secretTimer = setTimeout(() => { secretClicks = 0; }, 1200);
-      if (secretClicks >= 5) {
+      secretTimer = setTimeout(() => { secretClicks = 0; }, SECRET_CLICK_WINDOW_MS);
+      if (secretClicks >= SECRET_CLICK_THRESHOLD) {
         secretClicks = 0;
         openAuth();
       }
@@ -83,7 +89,11 @@ export function initLanding(successCallback: () => void): void {
 
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && !overlay.hidden) closeAuth();
-    if (event.ctrlKey && event.shiftKey && event.code === 'Period') {
+    if (
+      event.ctrlKey === AUTH_KEYBOARD_SHORTCUT.ctrlKey &&
+      event.shiftKey === AUTH_KEYBOARD_SHORTCUT.shiftKey &&
+      event.code === AUTH_KEYBOARD_SHORTCUT.code
+    ) {
       event.preventDefault();
       openAuth();
     }
@@ -92,7 +102,7 @@ export function initLanding(successCallback: () => void): void {
   window.addEventListener('session-expired', () => {
     setFolderId(null);
     showLanding();
-    showToast('Сессия завершилась. Войдите снова.');
+    showToast(strings.landing.sessionExpired);
   });
 
   api.session().then(successCallback).catch(() => showLanding());
@@ -102,5 +112,5 @@ export async function logout(): Promise<void> {
   try { await api.logout(); } catch { /* The local session is already unusable. */ }
   setFolderId(null);
   showLanding();
-  showToast('Вы вышли');
+  showToast(strings.landing.loggedOut);
 }

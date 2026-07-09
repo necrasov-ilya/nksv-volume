@@ -1,19 +1,35 @@
 import { Router } from 'express';
 import { nanoid } from 'nanoid';
+import {
+  ARTICLE_STATUS_DRAFT,
+  ARTICLE_STATUS_PUBLISHED,
+  DEFAULT_ARTICLE_TITLE,
+} from '../constants/articles.js';
+import { ERROR_MESSAGES } from '../constants/errors.js';
+import { NANOID_ID_LENGTH } from '../constants/limits.js';
+import { ARTICLES_ROUTE } from '../constants/routes.js';
 import { authMiddleware } from '../middleware/auth.js';
 import {
-  addMeta, findMeta, loadMeta, removeMeta, saveMeta,
+  addMeta,
+  findMetaByType,
+  loadMeta,
+  removeMeta,
+  saveMeta,
 } from '../utils/metaStore.js';
 import {
-  createArticleContentFile, deleteArticleContent, loadArticleContent, saveArticleContent,
+  createArticleContentFile,
+  deleteArticleContent,
+  loadArticleContent,
+  saveArticleContent,
 } from '../utils/articleStore.js';
+import { asyncHandler } from '../utils/routeHelpers.js';
+import {
+  findParentFolder,
+  validateArticleTitle,
+} from '../validation/meta.js';
 import type { ArticleContent, ArticleEntry, FileEntry } from '../types.js';
 
 const router = Router();
-
-function safeArticle(entry: ArticleEntry): Omit<ArticleEntry, never> {
-  return entry;
-}
 
 router.get('/articles/assets/images', authMiddleware, (_req, res) => {
   const images = loadMeta()
@@ -27,9 +43,9 @@ router.get('/articles/assets/images', authMiddleware, (_req, res) => {
   res.json({ images });
 });
 
-router.post('/articles', authMiddleware, (req, res) => {
+router.post(ARTICLES_ROUTE, authMiddleware, (req, res) => {
   const {
-    title = 'Без названия',
+    title = DEFAULT_ARTICLE_TITLE,
     folderId = null,
     annotation,
     tags,
@@ -40,21 +56,18 @@ router.post('/articles', authMiddleware, (req, res) => {
     tags?: string[];
   };
 
-  if (folderId) {
-    const parent = findMeta(folderId);
-    if (!parent || parent.type !== 'folder') {
-      return res.status(400).json({ error: 'Папка не найдена' });
-    }
+  if (folderId && !findParentFolder(folderId)) {
+    return res.status(400).json({ error: ERROR_MESSAGES.folderNotFound });
   }
 
   const now = new Date().toISOString();
   const entry: ArticleEntry = {
-    id: nanoid(10),
+    id: nanoid(NANOID_ID_LENGTH),
     type: 'article',
-    title: title.trim() || 'Без названия',
+    title: title.trim() || DEFAULT_ARTICLE_TITLE,
     annotation: annotation?.trim() || undefined,
-    tags: Array.isArray(tags) ? tags.filter((tag) => typeof tag === 'string') : undefined,
-    status: 'draft',
+    tags: Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
+    status: ARTICLE_STATUS_DRAFT,
     folderId: folderId || null,
     createdAt: now,
     updatedAt: now,
@@ -62,80 +75,90 @@ router.post('/articles', authMiddleware, (req, res) => {
 
   addMeta(entry);
   const content = createArticleContentFile(entry.id);
-  res.status(201).json({ article: safeArticle(entry), content });
+  res.status(201).json({ article: entry, content });
 });
 
-router.get('/articles/:id', authMiddleware, (req, res) => {
-  const entry = findMeta(req.params.id);
-  if (!entry || entry.type !== 'article') return res.status(404).json({ error: 'Статья не найдена' });
-  const content = loadArticleContent(entry.id) ?? createArticleContentFile(entry.id);
-  res.json({ article: safeArticle(entry), content });
-});
+router.get(
+  `${ARTICLES_ROUTE}/:id`,
+  authMiddleware,
+  asyncHandler((req, res) => {
+    const entry = findMetaByType<ArticleEntry>(req.params.id, 'article');
+    if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.articleNotFound });
+    const content = loadArticleContent(entry.id) ?? createArticleContentFile(entry.id);
+    res.json({ article: entry, content });
+  }),
+);
 
-router.put('/articles/:id', authMiddleware, (req, res) => {
-  const meta = loadMeta();
-  const entry = meta.find((item): item is ArticleEntry => item.id === req.params.id && item.type === 'article');
-  if (!entry) return res.status(404).json({ error: 'Статья не найдена' });
+router.put(
+  `${ARTICLES_ROUTE}/:id`,
+  authMiddleware,
+  asyncHandler((req, res) => {
+    const meta = loadMeta();
+    const entry = findMetaByType<ArticleEntry>(req.params.id, 'article');
+    if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.articleNotFound });
 
-  const body = req.body as {
-    title?: string;
-    annotation?: string;
-    tags?: string[];
-    coverImage?: string | null;
-    status?: 'draft' | 'published';
-    folderId?: string | null;
-    content?: ArticleContent;
-  };
+    const body = req.body as {
+      title?: string;
+      annotation?: string;
+      tags?: string[];
+      coverImage?: string | null;
+      status?: typeof ARTICLE_STATUS_DRAFT | typeof ARTICLE_STATUS_PUBLISHED;
+      folderId?: string | null;
+      content?: ArticleContent;
+    };
 
-  if (Object.prototype.hasOwnProperty.call(body, 'title')) {
-    const title = String(body.title ?? '').trim();
-    if (!title) return res.status(400).json({ error: 'Заголовок не может быть пустым' });
-    if (title.length > 200) return res.status(400).json({ error: 'Заголовок слишком длинный' });
-    entry.title = title;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'annotation')) {
-    entry.annotation = String(body.annotation ?? '').trim() || undefined;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'tags') && Array.isArray(body.tags)) {
-    entry.tags = body.tags.filter((tag): tag is string => typeof tag === 'string');
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'coverImage')) {
-    const coverImage = String(body.coverImage ?? '').trim();
-    entry.coverImage = coverImage || undefined;
-  }
-
-  if (Object.prototype.hasOwnProperty.call(body, 'status')) {
-    if (body.status !== 'draft' && body.status !== 'published') {
-      return res.status(400).json({ error: 'Недопустимый статус' });
+    if (Object.prototype.hasOwnProperty.call(body, 'title')) {
+      const titleResult = validateArticleTitle(body.title);
+      if (titleResult.error) return res.status(400).json({ error: titleResult.error });
+      entry.title = titleResult.value!;
     }
-    entry.status = body.status;
-  }
 
-  if (Object.prototype.hasOwnProperty.call(body, 'folderId')) {
-    const targetFolderId = body.folderId || null;
-    if (targetFolderId) {
-      const target = meta.find((item) => item.id === targetFolderId && item.type === 'folder');
-      if (!target) return res.status(400).json({ error: 'Папка назначения не найдена' });
+    if (Object.prototype.hasOwnProperty.call(body, 'annotation')) {
+      entry.annotation = String(body.annotation ?? '').trim() || undefined;
     }
-    entry.folderId = targetFolderId;
-  }
 
-  if (body.content) saveArticleContent(entry.id, body.content);
+    if (Object.prototype.hasOwnProperty.call(body, 'tags') && Array.isArray(body.tags)) {
+      entry.tags = body.tags.filter((tag): tag is string => typeof tag === 'string');
+    }
 
-  entry.updatedAt = new Date().toISOString();
-  saveMeta(meta);
-  const content = loadArticleContent(entry.id);
-  res.json({ article: safeArticle(entry), content });
-});
+    if (Object.prototype.hasOwnProperty.call(body, 'coverImage')) {
+      entry.coverImage = String(body.coverImage ?? '').trim() || undefined;
+    }
 
-router.delete('/articles/:id', authMiddleware, (req, res) => {
-  const entry = removeMeta(req.params.id);
-  if (!entry || entry.type !== 'article') return res.status(404).json({ error: 'Статья не найдена' });
-  deleteArticleContent(entry.id);
-  res.json({ ok: true });
-});
+    if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+      if (body.status !== ARTICLE_STATUS_DRAFT && body.status !== ARTICLE_STATUS_PUBLISHED) {
+        return res.status(400).json({ error: ERROR_MESSAGES.invalidStatus });
+      }
+      entry.status = body.status;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(body, 'folderId')) {
+      const targetFolderId: string | null = body.folderId || null;
+      if (targetFolderId && !findParentFolder(targetFolderId, meta)) {
+        return res.status(400).json({ error: ERROR_MESSAGES.destinationFolderNotFound });
+      }
+      entry.folderId = targetFolderId;
+    }
+
+    if (body.content) saveArticleContent(entry.id, body.content);
+
+    entry.updatedAt = new Date().toISOString();
+    saveMeta(meta);
+    res.json({ article: entry, content: loadArticleContent(entry.id) });
+  }),
+);
+
+router.delete(
+  `${ARTICLES_ROUTE}/:id`,
+  authMiddleware,
+  asyncHandler((req, res) => {
+    const entry = removeMeta(req.params.id);
+    if (!entry || entry.type !== 'article') {
+      return res.status(404).json({ error: ERROR_MESSAGES.articleNotFound });
+    }
+    deleteArticleContent(entry.id);
+    res.json({ ok: true });
+  }),
+);
 
 export default router;

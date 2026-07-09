@@ -1,10 +1,7 @@
 import { CoverImageField } from './CoverImageField.js';
+import { TagsInput } from './TagsInput.js';
+import { COVER_LABELS, STATE_LABELS, STATUS_LABELS } from '../constants/i18n.js';
 import type { ArticleDraft, ImageAsset } from '../types.js';
-
-const statusLabel: Record<ArticleDraft['status'], string> = {
-  published: 'Опубликована',
-  draft: 'Черновик',
-};
 
 type EditorSidebarBodyProps = {
   article: ArticleDraft;
@@ -33,26 +30,26 @@ export function EditorSidebarBody({
     <div className="admin-inspector-sidebar">
       <section className="admin-inspector-section">
         <div className="admin-inspector-section__head">
-          <h2>Публикация</h2>
+          <h2>{COVER_LABELS.publish}</h2>
           <span className={`admin-status admin-status--${article.status}`}>
-            {statusLabel[article.status]}
+            {STATUS_LABELS[article.status]}
           </span>
         </div>
         <dl className="admin-inspector-meta">
           <div>
-            <dt>ID</dt>
+            <dt>{COVER_LABELS.id}</dt>
             <dd>{article.id}</dd>
           </div>
           <div>
-            <dt>Состояние</dt>
-            <dd>{hasChanges ? 'Есть изменения' : 'Сохранено'}</dd>
+            <dt>{COVER_LABELS.state}</dt>
+            <dd>{hasChanges ? STATE_LABELS.hasChanges : STATE_LABELS.saved}</dd>
           </div>
         </dl>
       </section>
 
       <section className="admin-inspector-section">
         <div className="admin-inspector-section__head">
-          <h2>Обложка</h2>
+          <h2>{COVER_LABELS.cover}</h2>
         </div>
         <CoverImageField
           compact
@@ -66,15 +63,15 @@ export function EditorSidebarBody({
 
       <section className="admin-inspector-section">
         <div className="admin-inspector-section__head">
-          <h2>Паспорт</h2>
+          <h2>{COVER_LABELS.passport}</h2>
         </div>
         <div className="admin-field-grid admin-field-grid--stack">
           <label className="admin-field admin-field--full">
-            <span>Заголовок</span>
+            <span>{COVER_LABELS.title}</span>
             <input value={article.title} onChange={(event) => onTitle(event.target.value)} />
           </label>
           <label className="admin-field admin-field--full">
-            <span>Аннотация</span>
+            <span>{COVER_LABELS.annotation}</span>
             <textarea
               rows={2}
               value={article.annotation}
@@ -82,14 +79,8 @@ export function EditorSidebarBody({
             />
           </label>
           <label className="admin-field admin-field--full">
-            <span>Теги</span>
-            <input
-              value={article.tags.join(', ')}
-              onChange={(event) => onTags(
-                event.target.value.split(',').map((tag) => tag.trim()).filter(Boolean),
-              )}
-              placeholder="через запятую"
-            />
+            <span>{COVER_LABELS.tags}</span>
+            <TagsInput value={article.tags} placeholder={COVER_LABELS.tagsPlaceholder} onChange={onTags} />
           </label>
         </div>
       </section>

@@ -1,6 +1,8 @@
 import express from 'express';
 import path from 'path';
 import { config } from './config.js';
+import { API_PREFIX } from './constants/routes.js';
+import { MAX_JSON_BODY_SIZE_BYTES } from './constants/limits.js';
 import { errorBoundary } from './middleware/errorBoundary.js';
 import authRoutes from './routes/authRoutes.js';
 import fileRoutes from './routes/fileRoutes.js';
@@ -20,10 +22,10 @@ app.use((req, res, next) => {
     'Content-Security-Policy',
     "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
   );
-  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  if (req.path.startsWith(`${API_PREFIX}/`)) res.setHeader('Cache-Control', 'no-store');
   next();
 });
-app.use(express.json({ limit: '32kb' }));
+app.use(express.json({ limit: MAX_JSON_BODY_SIZE_BYTES }));
 app.use((req, res, next) => {
   if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) return next();
   const origin = req.headers.origin;
@@ -38,9 +40,9 @@ app.use((req, res, next) => {
 });
 app.use(express.static(config.paths.public));
 
-app.use('/api', authRoutes);
-app.use('/api', fileRoutes);
-app.use('/api', articleRoutes);
+app.use(API_PREFIX, authRoutes);
+app.use(API_PREFIX, fileRoutes);
+app.use(API_PREFIX, articleRoutes);
 app.use('/', publicRoutes);
 
 app.use(errorBoundary);

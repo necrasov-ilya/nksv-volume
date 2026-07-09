@@ -1,49 +1,73 @@
 import { ArrowLeft } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import {
   getArticle, getArticleId, listImages, session, updateArticle, uploadImage,
 } from './api.js';
+import { EDITOR_HOME } from './constants/api.js';
+import { ARTICLE_STATUSES, DEFAULT_ARTICLE_TITLE } from './constants/article.js';
+import { APP_LABELS, APP_TOASTS } from './constants/i18n.js';
 import { EditorActionPill } from './components/EditorActionPill.js';
 import { EditorCanvas, EditorInspector } from './components/EditorLayout.js';
+import { useToast } from './hooks/useToast.js';
+import { ensureDocContent } from './utils/articleContent.js';
 import { copyArticleShareLink } from './utils/share.js';
-import type { ArticleContent, ArticleDraft, Block, ImageAsset } from './types.js';
+import type { ArticleDraft, ArticleStatus, Block, ImageAsset } from './types.js';
 
-const emptyContent: Block = {
-  type: 'doc',
-  content: [{ type: 'paragraph' }],
-};
+type DraftAction =
+  | { type: 'load'; draft: ArticleDraft }
+  | { type: 'patch'; patch: Partial<ArticleDraft> }
+  | { type: 'reset'; draft: ArticleDraft };
 
-function toDoc(content: ArticleContent): Block {
-  const doc = content.content?.[0];
-  if (doc?.type === 'doc') return doc;
-  return emptyContent;
+function draftReducer(state: ArticleDraft | null, action: DraftAction): ArticleDraft | null {
+  switch (action.type) {
+    case 'load':
+    case 'reset':
+      return action.draft;
+    case 'patch':
+      if (!state) return state;
+      return { ...state, ...action.patch };
+    default:
+      return state;
+  }
 }
 
-function toStorage(content: Block): ArticleContent {
-  return { content: [content] };
+function toDraft(payload: Awaited<ReturnType<typeof getArticle>>): ArticleDraft {
+  return {
+    id: payload.article.id,
+    title: payload.article.title,
+    annotation: payload.article.annotation ?? '',
+    tags: payload.article.tags ?? [],
+    coverImage: payload.article.coverImage ?? '',
+    status: payload.article.status,
+    content: ensureDocContent(payload.content),
+  };
 }
 
-function showToast(message: string): void {
-  const toast = document.getElementById('toast');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.classList.add('show');
-  window.setTimeout(() => toast.classList.remove('show'), 2600);
+function toStoragePayload(article: ArticleDraft, publish: boolean) {
+  return {
+    title: article.title.trim() || DEFAULT_ARTICLE_TITLE,
+    annotation: article.annotation.trim(),
+    tags: article.tags,
+    coverImage: article.coverImage,
+    status: publish ? ARTICLE_STATUSES.published : ARTICLE_STATUSES.draft,
+    content: { content: [article.content as Block] },
+  };
 }
 
 export function App() {
   const articleId = getArticleId();
-  const [article, setArticle] = useState<ArticleDraft | null>(null);
+  const [article, dispatch] = useReducer(draftReducer, null as ArticleDraft | null);
   const [images, setImages] = useState<ImageAsset[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingCover, setUploadingCover] = useState(false);
   const [error, setError] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
+    if (!hasChanges) return;
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!hasChanges) return;
       event.preventDefault();
       event.returnValue = '';
     };
@@ -53,66 +77,50 @@ export function App() {
 
   useEffect(() => {
     if (!articleId) {
-      setError('Не указан id статьи');
+      setError(APP_LABELS.articleIdMissing);
       setLoading(false);
       return;
     }
-
+    let cancelled = false;
     Promise.all([session(), getArticle(articleId), listImages()])
       .then(([, payload, assets]) => {
-        setArticle({
-          id: payload.article.id,
-          title: payload.article.title,
-          annotation: payload.article.annotation ?? '',
-          tags: payload.article.tags ?? [],
-          coverImage: payload.article.coverImage ?? '',
-          status: payload.article.status,
-          content: toDoc(payload.content),
-        });
+        if (cancelled) return;
+        dispatch({ type: 'load', draft: toDraft(payload) });
         setImages(assets.images);
         setHasChanges(false);
       })
-      .catch((err: Error) => setError(err.message || 'Не удалось загрузить статью'))
-      .finally(() => setLoading(false));
+      .catch((err: Error) => {
+        if (cancelled) return;
+        setError(err.message || APP_LABELS.articleLoadError);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, [articleId]);
 
-  const patch = (next: Partial<ArticleDraft>) => {
-    setArticle((current) => (current ? { ...current, ...next } : current));
+  const patch = useCallback((next: Partial<ArticleDraft>) => {
+    dispatch({ type: 'patch', patch: next });
     setHasChanges(true);
-  };
+  }, []);
 
-  const save = async (publish = false) => {
+  const save = useCallback(async (publish: boolean) => {
     if (!article) return;
     setSaving(true);
     setError('');
     try {
-      const result = await updateArticle(article.id, {
-        title: article.title.trim() || 'Без названия',
-        annotation: article.annotation.trim(),
-        tags: article.tags,
-        coverImage: article.coverImage,
-        status: publish ? 'published' : 'draft',
-        content: toStorage(article.content),
-      });
-      setArticle({
-        id: result.article.id,
-        title: result.article.title,
-        annotation: result.article.annotation ?? '',
-        tags: result.article.tags ?? [],
-        coverImage: result.article.coverImage ?? '',
-        status: result.article.status,
-        content: toDoc(result.content),
-      });
+      const result = await updateArticle(article.id, toStoragePayload(article, publish));
+      dispatch({ type: 'reset', draft: toDraft(result) });
       setHasChanges(false);
-      showToast(publish ? 'Статья опубликована' : 'Сохранено');
+      toast(publish ? APP_TOASTS.published : APP_TOASTS.saved);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setSaving(false);
     }
-  };
+  }, [article, toast]);
 
-  const uploadCover = async (file: File) => {
+  const uploadCover = useCallback(async (file: File) => {
     setUploadingCover(true);
     try {
       const uploaded = await uploadImage(file);
@@ -123,71 +131,69 @@ export function App() {
     } finally {
       setUploadingCover(false);
     }
-  };
+  }, [patch]);
 
-  const handleBack = () => {
-    if (hasChanges && !window.confirm('Выйти без сохранения?')) return;
-    location.href = '/';
-  };
+  const handleBack = useCallback(() => {
+    if (hasChanges && !window.confirm(APP_LABELS.saveConfirmLeave)) return;
+    location.href = EDITOR_HOME;
+  }, [hasChanges]);
 
-  const copyShareLink = async () => {
+  const copyShareLink = useCallback(async () => {
     if (!article) return;
     const copied = await copyArticleShareLink(article.id);
-    showToast(copied ? 'Ссылка скопирована' : 'Не удалось скопировать ссылку');
-  };
+    toast(copied ? APP_TOASTS.linkCopied : APP_TOASTS.linkCopyFailed);
+  }, [article, toast]);
 
-  if (loading) return <div className="admin-loading">Загрузка…</div>;
-  if (!article) {
+  const view = useMemo(() => {
+    if (loading) return <div className="admin-loading">{APP_LABELS.loading}</div>;
+    if (!article) {
+      return (
+        <div className="admin-editor">
+          <p className="admin-error">{error || APP_LABELS.articleNotFound}</p>
+          <button type="button" className="admin-button-ghost" onClick={() => { location.href = EDITOR_HOME; }}>
+            <ArrowLeft size={16} />
+            {APP_LABELS.backToFiles}
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="admin-editor">
-        <p className="admin-error">{error || 'Статья не найдена'}</p>
-        <button type="button" className="admin-button-ghost" onClick={() => { location.href = '/'; }}>
-          <ArrowLeft size={16} />
-          К файлам
-        </button>
+        <header className="admin-editor-topbar">
+          <div className="admin-editor-topbar__main">
+            <button type="button" className="admin-button-ghost" onClick={handleBack}>
+              <ArrowLeft size={16} />
+              {APP_LABELS.backToFiles}
+            </button>
+            <span className="admin-editor-topbar__label">{APP_LABELS.editArticle}</span>
+          </div>
+          <EditorActionPill
+            saving={saving}
+            hasChanges={hasChanges}
+            status={article.status as ArticleStatus}
+            onSave={() => { void save(false); }}
+            onPublish={() => { void save(true); }}
+            onCopyLink={() => { void copyShareLink(); }}
+          />
+        </header>
+        {error && <p className="admin-error">{error}</p>}
+        <div className="admin-editor-layout">
+          <EditorCanvas article={article} onContentChange={(content) => patch({ content })} />
+          <EditorInspector
+            article={article}
+            hasChanges={hasChanges}
+            images={images}
+            uploadingCover={uploadingCover}
+            onTitle={(title) => patch({ title })}
+            onAnnotation={(annotation) => patch({ annotation })}
+            onTags={(tags) => patch({ tags })}
+            onCover={(coverImage) => patch({ coverImage })}
+            onUploadCover={(file) => { void uploadCover(file); }}
+          />
+        </div>
       </div>
     );
-  }
+  }, [loading, article, error, handleBack, saving, hasChanges, save, copyShareLink, patch, images, uploadingCover, uploadCover]);
 
-  return (
-    <div className="admin-editor">
-      <header className="admin-editor-topbar">
-        <div className="admin-editor-topbar__main">
-          <button type="button" className="admin-button-ghost" onClick={handleBack}>
-            <ArrowLeft size={16} />
-            К файлам
-          </button>
-          <span className="admin-editor-topbar__label">Редактирование статьи</span>
-        </div>
-        <EditorActionPill
-          saving={saving}
-          hasChanges={hasChanges}
-          status={article.status}
-          onSave={() => { void save(false); }}
-          onPublish={() => { void save(true); }}
-          onCopyLink={() => { void copyShareLink(); }}
-        />
-      </header>
-
-      {error && <p className="admin-error">{error}</p>}
-
-      <div className="admin-editor-layout">
-        <EditorCanvas
-          article={article}
-          onContentChange={(content) => patch({ content })}
-        />
-        <EditorInspector
-          article={article}
-          hasChanges={hasChanges}
-          images={images}
-          uploadingCover={uploadingCover}
-          onTitle={(title) => patch({ title })}
-          onAnnotation={(annotation) => patch({ annotation })}
-          onTags={(tags) => patch({ tags })}
-          onCover={(coverImage) => patch({ coverImage })}
-          onUploadCover={(file) => { void uploadCover(file); }}
-        />
-      </div>
-    </div>
-  );
+  return view;
 }

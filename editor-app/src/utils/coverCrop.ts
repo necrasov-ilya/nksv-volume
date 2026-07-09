@@ -1,4 +1,6 @@
 import { COVER_HEIGHT, COVER_WIDTH } from '../constants/cover.js';
+import { COVER_IMAGE_QUALITY } from '../constants/article.js';
+import { CROP_ERROR_MESSAGES } from '../constants/i18n.js';
 
 export type CoverCropTransform = {
   frameWidth: number;
@@ -75,14 +77,14 @@ export async function renderCroppedCoverFile(
   canvas.width = COVER_WIDTH;
   canvas.height = COVER_HEIGHT;
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Не удалось подготовить обрезку');
+  if (!ctx) throw new Error(CROP_ERROR_MESSAGES.prepareFailed);
 
   ctx.drawImage(image, srcX, srcY, srcW, srcH, 0, 0, COVER_WIDTH, COVER_HEIGHT);
 
   const blob = await new Promise<Blob | null>((resolve) => {
-    canvas.toBlob(resolve, 'image/jpeg', 0.9);
+    canvas.toBlob(resolve, 'image/jpeg', COVER_IMAGE_QUALITY);
   });
-  if (!blob) throw new Error('Не удалось обрезать изображение');
+  if (!blob) throw new Error(CROP_ERROR_MESSAGES.cropFailed);
 
   const base = fileName.replace(/\.[^.]+$/, '') || 'cover';
   return new File([blob], `${base}-cover.jpg`, { type: 'image/jpeg' });

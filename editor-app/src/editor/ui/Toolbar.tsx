@@ -1,27 +1,29 @@
-import type { Editor } from "@tiptap/react";
-import { Bold, Heading1, Heading2, Heading3, Italic, Link, List, ListOrdered, Quote } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import type { Editor } from '@tiptap/react';
+import { Bold, Heading1, Heading2, Heading3, Italic, Link as LinkIcon, List, ListOrdered, Quote } from 'lucide-react';
+import type { ComponentType } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  TOOLBAR_CANVAS_EDGE_GAP,
+  TOOLBAR_FALLBACK_HEIGHT,
+  TOOLBAR_GAP,
+  TOOLBAR_ICON_SIZE,
+} from '../../constants/editor.js';
+import { TOOLBAR_LABELS } from '../../constants/i18n.js';
+import { useFloatingPosition } from '../../hooks/useFloatingPosition.js';
 
-type ToolbarProps = {
-  editor: Editor;
+type ToolbarProps = { editor: Editor };
+
+type IconComponent = ComponentType<{ size?: number }>;
+
+type ToolbarItem = {
+  id: string;
+  label: string;
+  icon: IconComponent;
+  isActive(editor: Editor): boolean;
+  run(editor: Editor): void;
+  dividerAfter?: boolean;
 };
-
-type ToolbarPlacement = "above" | "below";
-
-type ToolbarAnchor = {
-  left: number;
-  top: number;
-  bottom: number;
-  relTop: number;
-  relBottom: number;
-  boundsLeft: number;
-  boundsRight: number;
-  canvasHeight: number;
-};
-
-const TOOLBAR_GAP = 10;
-const CANVAS_EDGE_GAP = 12;
 
 function getPortalRoot(): HTMLElement {
   return document.getElementById('editor-portal-root')
@@ -29,218 +31,202 @@ function getPortalRoot(): HTMLElement {
     ?? document.body;
 }
 
+const TOOLBAR_ITEMS: ToolbarItem[] = [
+  {
+    id: 'bold',
+    label: TOOLBAR_LABELS.bold,
+    icon: Bold,
+    isActive: (editor) => editor.isActive('bold'),
+    run: (editor) => editor.chain().focus().toggleBold().run(),
+  },
+  {
+    id: 'italic',
+    label: TOOLBAR_LABELS.italic,
+    icon: Italic,
+    isActive: (editor) => editor.isActive('italic'),
+    run: (editor) => editor.chain().focus().toggleItalic().run(),
+  },
+  {
+    id: 'link',
+    label: TOOLBAR_LABELS.link,
+    icon: LinkIcon,
+    isActive: (editor) => editor.isActive('link'),
+    run: (editor) => {
+      const url = window.prompt(TOOLBAR_LABELS.linkPrompt);
+      if (url) editor.chain().focus().setLink({ href: url }).run();
+    },
+    dividerAfter: true,
+  },
+  {
+    id: 'h1',
+    label: TOOLBAR_LABELS.heading1,
+    icon: Heading1,
+    isActive: (editor) => editor.isActive('heading', { level: 1 }),
+    run: (editor) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+  },
+  {
+    id: 'h2',
+    label: TOOLBAR_LABELS.heading2,
+    icon: Heading2,
+    isActive: (editor) => editor.isActive('heading', { level: 2 }),
+    run: (editor) => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+  },
+  {
+    id: 'h3',
+    label: TOOLBAR_LABELS.heading3,
+    icon: Heading3,
+    isActive: (editor) => editor.isActive('heading', { level: 3 }),
+    run: (editor) => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+    dividerAfter: true,
+  },
+  {
+    id: 'bullet',
+    label: TOOLBAR_LABELS.bulletList,
+    icon: List,
+    isActive: (editor) => editor.isActive('bulletList'),
+    run: (editor) => editor.chain().focus().toggleBulletList().run(),
+  },
+  {
+    id: 'ordered',
+    label: TOOLBAR_LABELS.orderedList,
+    icon: ListOrdered,
+    isActive: (editor) => editor.isActive('orderedList'),
+    run: (editor) => editor.chain().focus().toggleOrderedList().run(),
+  },
+  {
+    id: 'quote',
+    label: TOOLBAR_LABELS.blockquote,
+    icon: Quote,
+    isActive: (editor) => editor.isActive('blockquote'),
+    run: (editor) => editor.chain().focus().toggleBlockquote().run(),
+  },
+];
+
 export function Toolbar({ editor }: ToolbarProps) {
-  const [anchor, setAnchor] = useState<ToolbarAnchor | null>(null);
-  const [toolbarWidth, setToolbarWidth] = useState(0);
-  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const [anchor, setAnchor] = useState<{ left: number; top: number; bottom: number } | null>(null);
+  const [container, setContainer] = useState<DOMRect | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
 
-  const choosePlacement = (
-    top: number,
-    bottom: number,
-    canvasHeight: number,
-    measuredHeight: number,
-  ): ToolbarPlacement => {
-    const height = measuredHeight || 44;
-    const spaceAbove = top;
-    const spaceBelow = canvasHeight - bottom;
-    const need = height + TOOLBAR_GAP;
-
-    if (spaceAbove < need && spaceBelow >= need) return "below";
-    if (spaceBelow < need && spaceAbove > spaceBelow) return "above";
-    return spaceAbove >= need ? "above" : "below";
-  };
-
-  useEffect(() => {
-    const updateAnchor = () => {
-      const { state, view } = editor;
-      const { selection } = state;
-
-      if (selection.empty || !editor.isEditable) {
-        setAnchor(null);
-        return;
-      }
-
-      const canvas = view.dom.closest(".tiptap-editor__canvas");
-      if (!(canvas instanceof HTMLElement)) {
-        setAnchor(null);
-        return;
-      }
-
-      try {
-        const start = view.coordsAtPos(selection.from);
-        const end = view.coordsAtPos(selection.to);
-        const canvasRect = canvas.getBoundingClientRect();
-        const relTop = Math.min(start.top, end.top) - canvasRect.top;
-        const relBottom = Math.max(start.bottom, end.bottom) - canvasRect.top;
-
-        setAnchor({
-          left: (start.left + end.right) / 2,
-          top: Math.min(start.top, end.top),
-          bottom: Math.max(start.bottom, end.bottom),
-          relTop,
-          relBottom,
-          boundsLeft: canvasRect.left + CANVAS_EDGE_GAP,
-          boundsRight: canvasRect.right - CANVAS_EDGE_GAP,
-          canvasHeight: canvasRect.height,
-        });
-      } catch {
-        setAnchor(null);
-      }
-    };
-
-    editor.on("selectionUpdate", updateAnchor);
-    editor.on("transaction", updateAnchor);
-    window.addEventListener("resize", updateAnchor);
-    window.addEventListener("scroll", updateAnchor, true);
-    updateAnchor();
-
-    return () => {
-      editor.off("selectionUpdate", updateAnchor);
-      editor.off("transaction", updateAnchor);
-      window.removeEventListener("resize", updateAnchor);
-      window.removeEventListener("scroll", updateAnchor, true);
-    };
+  const updateAnchor = useCallback(() => {
+    const { state, view } = editor;
+    const { selection } = state;
+    if (selection.empty || !editor.isEditable) {
+      setAnchor(null);
+      return;
+    }
+    const canvas = view.dom.closest('.tiptap-editor__canvas');
+    if (!(canvas instanceof HTMLElement)) {
+      setAnchor(null);
+      return;
+    }
+    try {
+      const start = view.coordsAtPos(selection.from);
+      const end = view.coordsAtPos(selection.to);
+      const canvasRect = canvas.getBoundingClientRect();
+      setContainer(canvasRect);
+      setAnchor({
+        left: (start.left + end.right) / 2,
+        top: Math.min(start.top, end.top),
+        bottom: Math.max(start.bottom, end.bottom),
+      });
+    } catch {
+      setAnchor(null);
+    }
   }, [editor]);
 
-  const resolvedPlacement = useMemo(() => {
-    if (!anchor) return "above" as ToolbarPlacement;
-    return choosePlacement(anchor.relTop, anchor.relBottom, anchor.canvasHeight, toolbarHeight);
-  }, [anchor, toolbarHeight]);
-
-  const resolvedLeft = useMemo(() => {
-    if (!anchor) return 0;
-    if (!toolbarWidth) return anchor.left;
-
-    const halfWidth = toolbarWidth / 2;
-    const minLeft = anchor.boundsLeft + halfWidth;
-    const maxLeft = anchor.boundsRight - halfWidth;
-
-    if (maxLeft < minLeft) {
-      return (anchor.boundsLeft + anchor.boundsRight) / 2;
-    }
-
-    return Math.max(minLeft, Math.min(anchor.left, maxLeft));
-  }, [anchor, toolbarWidth]);
+  useEffect(() => {
+    editor.on('selectionUpdate', updateAnchor);
+    editor.on('transaction', updateAnchor);
+    window.addEventListener('resize', updateAnchor);
+    window.addEventListener('scroll', updateAnchor, true);
+    updateAnchor();
+    return () => {
+      editor.off('selectionUpdate', updateAnchor);
+      editor.off('transaction', updateAnchor);
+      window.removeEventListener('resize', updateAnchor);
+      window.removeEventListener('scroll', updateAnchor, true);
+    };
+  }, [editor, updateAnchor]);
 
   useLayoutEffect(() => {
     if (!anchor || !toolbarRef.current) return;
-
-    const updateSize = () => {
+    const measure = () => {
       if (!toolbarRef.current) return;
-      setToolbarWidth(toolbarRef.current.offsetWidth);
-      setToolbarHeight(toolbarRef.current.offsetHeight);
+      setSize({
+        width: toolbarRef.current.offsetWidth,
+        height: toolbarRef.current.offsetHeight,
+      });
     };
-
-    updateSize();
-    const observer = new ResizeObserver(updateSize);
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(toolbarRef.current);
-
     return () => observer.disconnect();
   }, [anchor]);
 
-  if (!anchor) return null;
+  const floating = useFloatingPosition({
+    anchor: anchor ? { left: anchor.left, top: anchor.top, bottom: anchor.bottom } : null,
+    container,
+    measuredHeight: size.height || undefined,
+    fallbackHeight: TOOLBAR_FALLBACK_HEIGHT,
+    gap: TOOLBAR_GAP,
+    edgeGap: TOOLBAR_CANVAS_EDGE_GAP,
+    prefer: 'above',
+  });
 
-  const isActive = (name: string, attrs?: Record<string, unknown>) => editor.isActive(name, attrs);
+  if (!anchor) return null;
 
   const toolbar = (
     <div
       ref={toolbarRef}
-      className={`editor-bubble-toolbar editor-bubble-toolbar--${resolvedPlacement}`}
-      style={{
-        left: resolvedLeft,
-        top: resolvedPlacement === "above" ? anchor.top : anchor.bottom,
-      }}
+      role="toolbar"
+      aria-label={TOOLBAR_LABELS.toolbarLabel}
+      className={`editor-bubble-toolbar editor-bubble-toolbar--${floating.placement}`}
+      style={{ left: floating.left, top: floating.top }}
       onMouseDown={(event) => event.preventDefault()}
     >
-      <button
-        type="button"
-        aria-label="Жирный"
-        data-tip="Жирный"
-        className={isActive("bold") ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-      >
-        <Bold size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Курсив"
-        data-tip="Курсив"
-        className={isActive("italic") ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-      >
-        <Italic size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Ссылка"
-        data-tip="Ссылка"
-        className={isActive("link") ? "active" : ""}
-        onClick={() => {
-          const url = window.prompt("URL");
-          if (url) editor.chain().focus().setLink({ href: url }).run();
-        }}
-      >
-        <Link size={15} />
-      </button>
-      <span className="editor-bubble-toolbar__divider" aria-hidden="true" />
-      <button
-        type="button"
-        aria-label="Заголовок 1"
-        data-tip="Заголовок 1"
-        className={isActive("heading", { level: 1 }) ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-      >
-        <Heading1 size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Заголовок 2"
-        data-tip="Заголовок 2"
-        className={isActive("heading", { level: 2 }) ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-      >
-        <Heading2 size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Заголовок 3"
-        data-tip="Заголовок 3"
-        className={isActive("heading", { level: 3 }) ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        <Heading3 size={15} />
-      </button>
-      <span className="editor-bubble-toolbar__divider" aria-hidden="true" />
-      <button
-        type="button"
-        aria-label="Маркированный список"
-        data-tip="Маркированный список"
-        className={isActive("bulletList") ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-      >
-        <List size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Нумерованный список"
-        data-tip="Нумерованный список"
-        className={isActive("orderedList") ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-      >
-        <ListOrdered size={15} />
-      </button>
-      <button
-        type="button"
-        aria-label="Цитата"
-        data-tip="Цитата"
-        className={isActive("blockquote") ? "active" : ""}
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-      >
-        <Quote size={15} />
-      </button>
+      {TOOLBAR_ITEMS.map((item) => {
+        const Icon = item.icon;
+        const active = item.isActive(editor);
+        return (
+          <ToolbarButton
+            key={item.id}
+            item={item}
+            icon={Icon}
+            active={active}
+            onActivate={() => item.run(editor)}
+            showDivider={item.dividerAfter}
+          />
+        );
+      })}
     </div>
   );
 
   return createPortal(toolbar, getPortalRoot());
+}
+
+interface ToolbarButtonProps {
+  item: ToolbarItem;
+  icon: IconComponent;
+  active: boolean;
+  onActivate(): void;
+  showDivider?: boolean;
+}
+
+function ToolbarButton({ item, icon: Icon, active, onActivate, showDivider }: ToolbarButtonProps) {
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={item.label}
+        aria-pressed={active}
+        data-tip={item.label}
+        className={active ? 'active' : ''}
+        onClick={onActivate}
+      >
+        <Icon size={TOOLBAR_ICON_SIZE} />
+      </button>
+      {showDivider && <span className="editor-bubble-toolbar__divider" aria-hidden="true" />}
+    </>
+  );
 }

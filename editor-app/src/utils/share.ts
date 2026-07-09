@@ -1,5 +1,7 @@
+import { SHARE_ROUTE } from '../constants/api.js';
+
 export function articleShareUrl(articleId: string): string {
-  return `${window.location.origin}/v/${articleId}`;
+  return `${window.location.origin}${SHARE_ROUTE(articleId)}`;
 }
 
 export async function copyArticleShareLink(articleId: string): Promise<boolean> {

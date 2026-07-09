@@ -1,6 +1,18 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ALLOWED_UPLOAD_MIME_TYPES } from './constants/mime.js';
+import {
+  DEFAULT_PORT,
+  MIN_ADMIN_PASSWORD_LENGTH,
+  DEFAULT_MAX_FILE_SIZE_MB,
+  MAX_ALLOWED_FILE_SIZE_MB,
+  MIN_FILE_SIZE_MB,
+  DEFAULT_MAX_STORAGE_GB,
+  MAX_ALLOWED_STORAGE_GB,
+  MIN_STORAGE_GB,
+  MAX_FILES_PER_UPLOAD,
+} from './constants/limits.js';
 
 dotenv.config();
 
@@ -11,12 +23,12 @@ const adminPassword = process.env.ADMIN_PASSWORD?.trim();
 if (!adminPassword) {
   throw new Error('ADMIN_PASSWORD is required. Copy .env.example to .env and set a strong password.');
 }
-if (adminPassword.length < 12) {
-  throw new Error('ADMIN_PASSWORD must contain at least 12 characters.');
+if (adminPassword.length < MIN_ADMIN_PASSWORD_LENGTH) {
+  throw new Error(`ADMIN_PASSWORD must contain at least ${MIN_ADMIN_PASSWORD_LENGTH} characters.`);
 }
 
-const requestedMaxFileSize = parseInt(process.env.MAX_FILE_SIZE || '200', 10);
-const requestedMaxStorageGb = parseFloat(process.env.MAX_STORAGE_GB || '20');
+const requestedMaxFileSize = parseInt(process.env.MAX_FILE_SIZE || String(DEFAULT_MAX_FILE_SIZE_MB), 10);
+const requestedMaxStorageGb = parseFloat(process.env.MAX_STORAGE_GB || String(DEFAULT_MAX_STORAGE_GB));
 
 interface AppConfig {
   port: number;
@@ -38,13 +50,25 @@ interface AppConfig {
 }
 
 export const config: AppConfig = {
-  port: parseInt(process.env.PORT || '3000', 10),
+  port: parseInt(process.env.PORT || String(DEFAULT_PORT), 10),
   adminPassword,
   isProduction: process.env.NODE_ENV === 'production',
   trustProxy: process.env.TRUST_PROXY === '1' ? 1 : false,
-  maxFileSizeMb: Math.max(1, Math.min(Number.isFinite(requestedMaxFileSize) ? requestedMaxFileSize : 200, 200)),
-  maxStorageGb: Math.max(0.01, Math.min(Number.isFinite(requestedMaxStorageGb) ? requestedMaxStorageGb : 20, 20)),
-  maxFilesPerUpload: 20,
+  maxFileSizeMb: Math.max(
+    MIN_FILE_SIZE_MB,
+    Math.min(
+      Number.isFinite(requestedMaxFileSize) ? requestedMaxFileSize : DEFAULT_MAX_FILE_SIZE_MB,
+      MAX_ALLOWED_FILE_SIZE_MB,
+    ),
+  ),
+  maxStorageGb: Math.max(
+    MIN_STORAGE_GB,
+    Math.min(
+      Number.isFinite(requestedMaxStorageGb) ? requestedMaxStorageGb : DEFAULT_MAX_STORAGE_GB,
+      MAX_ALLOWED_STORAGE_GB,
+    ),
+  ),
+  maxFilesPerUpload: MAX_FILES_PER_UPLOAD,
   paths: {
     root,
     uploads: path.join(root, 'uploads'),
@@ -53,9 +77,5 @@ export const config: AppConfig = {
     metaFile: path.join(root, 'data', 'files.json'),
     public: path.join(root, 'public'),
   },
-  mimeWhitelist: [
-    'video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska',
-    'image/png', 'image/jpeg', 'image/webp', 'image/gif',
-    'application/pdf',
-  ],
+  mimeWhitelist: [...ALLOWED_UPLOAD_MIME_TYPES],
 };

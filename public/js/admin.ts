@@ -1,20 +1,24 @@
 import { initLanding, logout } from './landing.js';
 import { initUpload, openFilePicker } from './upload.js';
-import { initFileList, loadFiles } from './fileList.js';
+import { initFileList, loadFiles, type ListState, type NavigateCallback } from './fileList/index.js';
 import { getFolderId, setFolderId, showToast } from './config.js';
 import { api } from './api.js';
+import { EDITOR_ROUTE } from './constants/routes.js';
+import { strings } from './constants/i18n.js';
+
+let listState: ListState | null = null;
 
 function showAdmin(): void {
   const landing = document.getElementById('landing') as HTMLElement | null;
   const admin = document.getElementById('admin') as HTMLElement | null;
   if (landing) landing.hidden = true;
   if (admin) admin.hidden = false;
-  loadFiles();
+  void loadFiles(null, listState!);
 }
 
 function navigateTo(folderId: string | null): void {
   setFolderId(folderId);
-  loadFiles();
+  void loadFiles(null, listState!);
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -57,8 +61,8 @@ async function createFolder(event: SubmitEvent): Promise<void> {
   try {
     const result = await api.createFolder(name, getFolderId());
     closeFolderDialog();
-    showToast('Папка создана');
-    await loadFiles(result.folder.id);
+    showToast(strings.admin.folderCreated);
+    await loadFiles(result.folder.id, listState!);
   } catch (error) {
     showToast((error as Error).message);
   } finally {
@@ -70,8 +74,8 @@ async function createArticle(): Promise<void> {
   closeAddMenu();
   try {
     const result = await api.createArticle(getFolderId());
-    showToast('Статья создана');
-    window.location.href = `/editor?id=${encodeURIComponent(result.article.id)}`;
+    showToast(strings.admin.articleCreated);
+    window.location.href = EDITOR_ROUTE(result.article.id);
   } catch (error) {
     showToast((error as Error).message);
   }
@@ -114,8 +118,8 @@ function initAddMenu(): void {
 }
 
 function init(): void {
-  initFileList(navigateTo);
-  initUpload((uploadedId) => loadFiles(uploadedId));
+  listState = initFileList(navigateTo satisfies NavigateCallback);
+  initUpload((uploadedId) => { void loadFiles(uploadedId ?? null, listState!); });
   initLanding(showAdmin);
   initAddMenu();
 

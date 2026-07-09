@@ -1,140 +1,201 @@
-import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
-import { useEffect, useState } from "react";
+import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react';
+import { useCallback, useEffect, useReducer } from 'react';
+
+interface CompareTableAttrs {
+  caption: string;
+  columns: string[];
+  rows: string[][];
+}
+
+type State = CompareTableAttrs;
+
+type Action =
+  | { type: 'hydrate'; payload: CompareTableAttrs }
+  | { type: 'setCaption'; value: string }
+  | { type: 'setColumn'; index: number; value: string }
+  | { type: 'setCell'; row: number; col: number; value: string }
+  | { type: 'addColumn' }
+  | { type: 'removeColumn' }
+  | { type: 'addRow' }
+  | { type: 'removeRow' };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'hydrate':
+      return {
+        caption: action.payload.caption || '',
+        columns: [...action.payload.columns],
+        rows: action.payload.rows.map((row) => [...row]),
+      };
+    case 'setCaption':
+      return { ...state, caption: action.value };
+    case 'setColumn': {
+      const columns = [...state.columns];
+      columns[action.index] = action.value;
+      return { ...state, columns };
+    }
+    case 'setCell': {
+      const rows = state.rows.map((row, ri) => {
+        if (ri !== action.row) return row;
+        const next = [...row];
+        next[action.col] = action.value;
+        return next;
+      });
+      return { ...state, rows };
+    }
+    case 'addColumn': {
+      const columns = [...state.columns, ''];
+      const rows = state.rows.map((row) => [...row, '']);
+      return { ...state, columns, rows };
+    }
+    case 'removeColumn': {
+      if (state.columns.length <= 1) return state;
+      const columns = state.columns.slice(0, -1);
+      const rows = state.rows.map((row) => row.slice(0, -1));
+      return { ...state, columns, rows };
+    }
+    case 'addRow': {
+      const rows = [...state.rows, Array<string>(state.columns.length).fill('')];
+      return { ...state, rows };
+    }
+    case 'removeRow': {
+      if (state.rows.length <= 1) return state;
+      return { ...state, rows: state.rows.slice(0, -1) };
+    }
+    default:
+      return state;
+  }
+}
+
+const initialState: State = { caption: '', columns: [], rows: [] };
 
 export function CompareTableComponent({ node, updateAttributes }: NodeViewProps) {
-  const { caption, columns, rows } = node.attrs as {
-    caption: string;
-    columns: string[];
-    rows: string[][];
-  };
-
-  const [localCaption, setLocalCaption] = useState(caption || "");
-  const [localColumns, setLocalColumns] = useState<string[]>(columns || []);
-  const [localRows, setLocalRows] = useState<string[][]>(rows || []);
+  const attrs = node.attrs as CompareTableAttrs;
+  const [state, dispatch] = useReducer(reducer, initialState);
 
   useEffect(() => {
-    setLocalCaption(caption || "");
-    setLocalColumns(columns || []);
-    setLocalRows(rows || []);
-  }, [caption, columns, rows]);
+    dispatch({ type: 'hydrate', payload: attrs });
+  }, [attrs.caption, attrs.columns, attrs.rows]);
 
-  const sync = (
-    nextCaption: string = localCaption,
-    nextCols: string[] = localColumns,
-    nextRows: string[][] = localRows,
-  ) => {
+  useEffect(() => {
     updateAttributes({
-      caption: nextCaption,
-      columns: nextCols,
-      rows: nextRows,
+      caption: state.caption,
+      columns: state.columns,
+      rows: state.rows,
     });
-  };
+  }, [state.caption, state.columns, state.rows, updateAttributes]);
 
-  const updateCol = (index: number, value: string) => {
-    const nextCols = [...localColumns];
-    nextCols[index] = value;
-    setLocalColumns(nextCols);
-    sync(localCaption, nextCols, localRows);
-  };
+  const onCaptionChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'setCaption', value: event.target.value });
+  }, []);
 
-  const updateCell = (rowIndex: number, colIndex: number, value: string) => {
-    const nextRows = localRows.map((row, ri) =>
-      ri === rowIndex
-        ? row.map((cell, ci) => (ci === colIndex ? value : cell))
-        : row,
-    );
-    setLocalRows(nextRows);
-    sync(localCaption, localColumns, nextRows);
-  };
+  const onColumnChange = useCallback((index: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'setColumn', index, value: event.target.value });
+  }, []);
 
-  const addColumn = () => {
-    const nextCols = [...localColumns, ""];
-    const nextRows = localRows.map((row) => [...row, ""]);
-    setLocalColumns(nextCols);
-    setLocalRows(nextRows);
-    sync(localCaption, nextCols, nextRows);
-  };
-
-  const removeColumn = () => {
-    if (localColumns.length <= 1) return;
-    const nextCols = localColumns.slice(0, -1);
-    const nextRows = localRows.map((row) => row.slice(0, -1));
-    setLocalColumns(nextCols);
-    setLocalRows(nextRows);
-    sync(localCaption, nextCols, nextRows);
-  };
-
-  const addRow = () => {
-    const nextRows = [...localRows, Array(localColumns.length).fill("")];
-    setLocalRows(nextRows);
-    sync(localCaption, localColumns, nextRows);
-  };
-
-  const removeRow = () => {
-    if (localRows.length <= 1) return;
-    const nextRows = localRows.slice(0, -1);
-    setLocalRows(nextRows);
-    sync(localCaption, localColumns, nextRows);
-  };
+  const onCellChange = useCallback((row: number, col: number) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    dispatch({ type: 'setCell', row, col, value: event.target.value });
+  }, []);
 
   return (
     <NodeViewWrapper className="editor-compare-table" data-type="compareTable">
-      <figcaption contentEditable={false}>
-        <input
-          type="text"
-          value={localCaption}
-          onChange={(e) => setLocalCaption(e.target.value)}
-          onBlur={() => sync()}
-          placeholder="Подпись к таблице"
-          className="editor-compare-table__caption"
-        />
-      </figcaption>
-      <table contentEditable={false}>
-        <thead>
-          <tr>
-            {localColumns.map((col, i) => (
-              <th key={i}>
+      <CompareTableCaption value={state.caption} onChange={onCaptionChange} />
+      <CompareTableGrid
+        columns={state.columns}
+        rows={state.rows}
+        onColumnChange={onColumnChange}
+        onCellChange={onCellChange}
+      />
+      <CompareTableControls
+        onAddColumn={() => dispatch({ type: 'addColumn' })}
+        onRemoveColumn={() => dispatch({ type: 'removeColumn' })}
+        onAddRow={() => dispatch({ type: 'addRow' })}
+        onRemoveRow={() => dispatch({ type: 'removeRow' })}
+      />
+    </NodeViewWrapper>
+  );
+}
+
+interface CompareTableCaptionProps {
+  value: string;
+  onChange(event: React.ChangeEvent<HTMLInputElement>): void;
+}
+
+function CompareTableCaption({ value, onChange }: CompareTableCaptionProps) {
+  return (
+    <figcaption contentEditable={false}>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder="Подпись к таблице"
+        className="editor-compare-table__caption"
+        aria-label="Подпись к таблице"
+      />
+    </figcaption>
+  );
+}
+
+interface CompareTableGridProps {
+  columns: string[];
+  rows: string[][];
+  onColumnChange(index: number): (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onCellChange(row: number, col: number): (event: React.ChangeEvent<HTMLInputElement>) => void;
+}
+
+function CompareTableGrid({ columns, rows, onColumnChange, onCellChange }: CompareTableGridProps) {
+  return (
+    <table contentEditable={false}>
+      <thead>
+        <tr>
+          {columns.map((col, i) => (
+            <th key={i}>
+              <input
+                type="text"
+                value={col}
+                onChange={onColumnChange(i)}
+                placeholder={`Колонка ${i + 1}`}
+                aria-label={`Заголовок колонки ${i + 1}`}
+              />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, ri) => (
+          <tr key={ri}>
+            {row.map((cell, ci) => (
+              <td key={ci}>
                 <input
                   type="text"
-                  value={col}
-                  onChange={(e) => updateCol(i, e.target.value)}
-                  placeholder={`Колонка ${i + 1}`}
+                  value={cell}
+                  onChange={onCellChange(ri, ci)}
+                  placeholder="—"
+                  aria-label={`Строка ${ri + 1}, колонка ${ci + 1}`}
                 />
-              </th>
+              </td>
             ))}
           </tr>
-        </thead>
-        <tbody>
-          {localRows.map((row, ri) => (
-            <tr key={ri}>
-              {row.map((cell, ci) => (
-                <td key={ci}>
-                  <input
-                    type="text"
-                    value={cell}
-                    onChange={(e) => updateCell(ri, ci, e.target.value)}
-                    placeholder="—"
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="editor-compare-table__controls" contentEditable={false}>
-        <button type="button" onClick={addColumn}>
-          + колонка
-        </button>
-        <button type="button" onClick={removeColumn}>
-          − колонка
-        </button>
-        <button type="button" onClick={addRow}>
-          + строка
-        </button>
-        <button type="button" onClick={removeRow}>
-          − строка
-        </button>
-      </div>
-    </NodeViewWrapper>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+interface CompareTableControlsProps {
+  onAddColumn(): void;
+  onRemoveColumn(): void;
+  onAddRow(): void;
+  onRemoveRow(): void;
+}
+
+function CompareTableControls({ onAddColumn, onRemoveColumn, onAddRow, onRemoveRow }: CompareTableControlsProps) {
+  return (
+    <div className="editor-compare-table__controls" contentEditable={false}>
+      <button type="button" onClick={onAddColumn} aria-label="Добавить колонку">+ колонка</button>
+      <button type="button" onClick={onRemoveColumn} aria-label="Удалить колонку">− колонка</button>
+      <button type="button" onClick={onAddRow} aria-label="Добавить строку">+ строка</button>
+      <button type="button" onClick={onRemoveRow} aria-label="Удалить строку">− строка</button>
+    </div>
   );
 }
