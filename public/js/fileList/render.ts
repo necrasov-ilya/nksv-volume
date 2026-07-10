@@ -123,7 +123,7 @@ export function rowTemplate(item: ClientEntry, selectedId: string | null): strin
 }
 
 export function breadcrumbsTemplate(crumbs: Breadcrumb[]): string {
-  const parentId = crumbs.length > 1 ? crumbs[crumbs.length - 1]!.id : '';
+  const parentId = crumbs.length > 1 ? crumbs[crumbs.length - 2]!.id : '';
   const parts: string[] = [];
   if (crumbs.length) {
     parts.push(`

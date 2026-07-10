@@ -9,6 +9,7 @@ COPY tsconfig.json tsconfig.client.json ./
 COPY server.ts ./
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 
 COPY editor-app/package.json editor-app/package-lock.json* ./editor-app/
 RUN npm --prefix editor-app ci

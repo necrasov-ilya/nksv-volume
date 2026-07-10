@@ -74,7 +74,12 @@ router.get(PUBLIC_META_ROUTE, (req, res) => {
   if (!entry || entry.type === 'folder') {
     return res.status(404).json({ error: ERROR_MESSAGES.notFound });
   }
-  if (entry.type === 'article') return res.json(safeArticleShare(entry));
+  if (entry.type === 'article') {
+    if (entry.status !== ARTICLE_STATUS_PUBLISHED) {
+      return res.status(404).json({ error: ERROR_MESSAGES.notFound });
+    }
+    return res.json(safeArticleShare(entry));
+  }
   return res.json(safeFile(entry));
 });
 

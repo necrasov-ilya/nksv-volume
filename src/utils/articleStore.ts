@@ -3,6 +3,7 @@ import path from 'path';
 import { config } from '../config.js';
 import type { ArticleContent } from '../types.js';
 import { emptyArticleContent } from './articleRender.js';
+import { writeJsonAtomically } from './jsonFile.js';
 
 fs.mkdirSync(config.paths.articles, { recursive: true });
 
@@ -14,14 +15,18 @@ export function loadArticleContent(id: string): ArticleContent | null {
   const filePath = contentPath(id);
   if (!fs.existsSync(filePath)) return null;
   try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ArticleContent;
-  } catch {
-    return null;
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as ArticleContent).content)) {
+      throw new Error('Article content root must contain a content array');
+    }
+    return parsed as ArticleContent;
+  } catch (error) {
+    throw new Error(`Unable to read article content ${id}`, { cause: error });
   }
 }
 
 export function saveArticleContent(id: string, content: ArticleContent): void {
-  fs.writeFileSync(contentPath(id), JSON.stringify(content, null, 2));
+  writeJsonAtomically(contentPath(id), content);
 }
 
 export function createArticleContentFile(id: string, content: ArticleContent = emptyArticleContent()): ArticleContent {

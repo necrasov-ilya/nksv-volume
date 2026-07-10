@@ -2,6 +2,9 @@ import {
   MAX_FOLDER_NAME_LENGTH,
   MAX_FILE_NAME_LENGTH,
   MAX_ARTICLE_TITLE_LENGTH,
+  MAX_ANNOTATION_LENGTH,
+  MAX_TAG_COUNT,
+  MAX_TAG_LENGTH,
 } from '../constants/limits.js';
 import { ERROR_MESSAGES } from '../constants/errors.js';
 import type { FolderEntry, MetaEntry } from '../types.js';
@@ -32,11 +35,32 @@ export function validateArticleTitle(title: unknown): ValidationResult<string> {
   return { value: trimmed };
 }
 
+export function validateArticleAnnotation(annotation: unknown): ValidationResult<string | undefined> {
+  if (annotation === null || annotation === undefined) return { value: undefined };
+  if (typeof annotation !== 'string') return { error: ERROR_MESSAGES.invalidRequest };
+  const trimmed = annotation.trim();
+  if (trimmed.length > MAX_ANNOTATION_LENGTH) return { error: ERROR_MESSAGES.annotationTooLong };
+  return { value: trimmed || undefined };
+}
+
+export function validateArticleTags(tags: unknown): ValidationResult<string[] | undefined> {
+  if (tags === null || tags === undefined) return { value: undefined };
+  if (!Array.isArray(tags) || tags.some((tag) => typeof tag !== 'string')) {
+    return { error: ERROR_MESSAGES.invalidTags };
+  }
+
+  const normalized = tags.map((tag) => tag.trim()).filter(Boolean);
+  if (normalized.length > MAX_TAG_COUNT) return { error: ERROR_MESSAGES.tooManyTags };
+  if (normalized.some((tag) => tag.length > MAX_TAG_LENGTH)) {
+    return { error: ERROR_MESSAGES.tagTooLong };
+  }
+  return { value: [...new Set(normalized)] };
+}
+
 export function findParentFolder(
   folderId: string | null | undefined,
-  meta?: MetaEntry[],
+  meta: MetaEntry[],
 ): FolderEntry | undefined {
   if (!folderId) return undefined;
-  const source = meta ?? [];
-  return source.find((item): item is FolderEntry => item.id === folderId && item.type === 'folder');
+  return meta.find((item): item is FolderEntry => item.id === folderId && item.type === 'folder');
 }

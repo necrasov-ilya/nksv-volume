@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
 import multer from 'multer';
 import { nanoid } from 'nanoid';
 import path from 'path';
@@ -23,7 +23,7 @@ import {
   deleteFolderRecursive,
   findMetaByType,
   loadMeta,
-  removeMeta,
+  removeMetaByType,
   saveMeta,
 } from '../utils/metaStore.js';
 import {
@@ -44,6 +44,32 @@ import {
 import type { ArticleEntry, FileEntry, FolderEntry } from '../types.js';
 
 const router = Router();
+let reservedUploadBytes = 0;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+const reserveUploadCapacity: RequestHandler = (req, res, next) => {
+  const rawLength = req.headers['content-length'];
+  const declaredBytes = typeof rawLength === 'string' ? Number(rawLength) : Number.NaN;
+  if (!Number.isFinite(declaredBytes) || declaredBytes <= 0) return next();
+
+  if (getStorageUsageBytes() + reservedUploadBytes + declaredBytes > storageLimitBytes()) {
+    return res.status(507).json({ error: ERROR_MESSAGES.storageFull(config.maxStorageGb) });
+  }
+
+  reservedUploadBytes += declaredBytes;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    reservedUploadBytes -= declaredBytes;
+  };
+  res.once('finish', release);
+  res.once('close', release);
+  next();
+};
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -62,6 +88,7 @@ const upload = multer({
 router.post(
   UPLOAD_ROUTE,
   authMiddleware,
+  reserveUploadCapacity,
   upload.array(UPLOAD_FIELD_NAME, MAX_FILES_PER_UPLOAD),
   (req, res) => {
     const folderId: string | null = req.body.folderId || null;
@@ -96,11 +123,16 @@ router.post(
 );
 
 router.post(FOLDERS_ROUTE, authMiddleware, (req, res) => {
+  if (!isRecord(req.body)) {
+    return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+  }
+
   const { name, folderId = null } = req.body as { name?: string; folderId?: string | null };
   const nameResult = validateFolderName(name);
   if (nameResult.error) return res.status(400).json({ error: nameResult.error });
 
-  const parentResult = findParentFolder(folderId);
+  const meta = loadMeta();
+  const parentResult = findParentFolder(folderId, meta);
   if (folderId && !parentResult) {
     return res.status(400).json({ error: ERROR_MESSAGES.parentFolderNotFound });
   }
@@ -131,15 +163,20 @@ router.get(FOLDERS_ROUTE, authMiddleware, (_req, res) => {
 });
 
 router.patch(`${FOLDERS_ROUTE}/:id`, authMiddleware, (req, res) => {
+  if (!isRecord(req.body)) {
+    return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+  }
+
+  let nameResult;
   if (req.body.name !== undefined) {
-    const nameResult = validateFolderName(req.body.name);
+    nameResult = validateFolderName(req.body.name);
     if (nameResult.error) return res.status(400).json({ error: nameResult.error });
   }
 
   const meta = loadMeta();
-  const entry = findMetaByType<FolderEntry>(req.params.id, 'folder');
+  const entry = meta.find((item): item is FolderEntry => item.id === req.params.id && item.type === 'folder');
   if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.notFound });
-  if (req.body.name !== undefined) entry.name = req.body.name.trim();
+  if (nameResult?.value) entry.name = nameResult.value;
   saveMeta(meta);
   res.json({ folder: entry });
 });
@@ -178,13 +215,21 @@ router.get(FILES_ROUTE, authMiddleware, (req, res) => {
 });
 
 router.patch(`${FILES_ROUTE}/:id`, authMiddleware, (req, res) => {
+  if (!isRecord(req.body)) {
+    return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+  }
+
   const meta = loadMeta();
-  const entry = findMetaByType<FileEntry>(req.params.id, 'file');
+  const entry = meta.find((item): item is FileEntry => item.id === req.params.id && item.type === 'file');
   if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.fileNotFound });
 
   if (Object.prototype.hasOwnProperty.call(req.body, 'folderId')) {
-    const targetFolderId: string | null = req.body.folderId || null;
-    if (targetFolderId && !findMetaByType<FolderEntry>(targetFolderId, 'folder')) {
+    const rawFolderId = req.body.folderId;
+    if (rawFolderId !== null && rawFolderId !== undefined && typeof rawFolderId !== 'string') {
+      return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+    }
+    const targetFolderId = rawFolderId || null;
+    if (targetFolderId && !meta.some((item) => item.id === targetFolderId && item.type === 'folder')) {
       return res.status(400).json({ error: ERROR_MESSAGES.destinationFolderNotFound });
     }
     entry.folderId = targetFolderId;
@@ -204,9 +249,9 @@ router.delete(
   `${FILES_ROUTE}/:id`,
   authMiddleware,
   asyncHandler((req, res) => {
-    const entry = removeMeta(req.params.id);
+    const entry = removeMetaByType<FileEntry>(req.params.id, 'file');
     if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.notFound });
-    if (entry.type === 'file') deleteStoredFile(entry.storedName);
+    deleteStoredFile(entry.storedName);
     res.json({ ok: true });
   }),
 );

@@ -1,19 +1,22 @@
 import fs from 'fs';
 import { config } from '../config.js';
 import { normalizeFilename } from './filename.js';
+import { writeJsonAtomically } from './jsonFile.js';
 import type { MetaEntry, FileEntry, FolderEntry, ArticleEntry } from '../types.js';
 
 fs.mkdirSync(config.paths.uploads, { recursive: true });
 fs.mkdirSync(config.paths.data, { recursive: true });
-if (!fs.existsSync(config.paths.metaFile)) fs.writeFileSync(config.paths.metaFile, '[]');
+if (!fs.existsSync(config.paths.metaFile)) writeJsonAtomically(config.paths.metaFile, []);
 
 let cachedMeta: MetaEntry[] | null = null;
 
 function readMetaFile(): MetaEntry[] {
   try {
-    return JSON.parse(fs.readFileSync(config.paths.metaFile, 'utf-8')) as MetaEntry[];
-  } catch {
-    return [];
+    const parsed: unknown = JSON.parse(fs.readFileSync(config.paths.metaFile, 'utf-8'));
+    if (!Array.isArray(parsed)) throw new Error('Metadata root must be an array');
+    return parsed as MetaEntry[];
+  } catch (error) {
+    throw new Error(`Unable to read metadata file ${config.paths.metaFile}`, { cause: error });
   }
 }
 
@@ -35,13 +38,13 @@ export function loadMeta(): MetaEntry[] {
 
   const data = readMetaFile();
   const changed = normalizeMetaEntries(data);
-  if (changed) fs.writeFileSync(config.paths.metaFile, JSON.stringify(data, null, 2));
+  if (changed) writeJsonAtomically(config.paths.metaFile, data);
   cachedMeta = data;
   return structuredClone(data);
 }
 
 export function saveMeta(data: MetaEntry[]): void {
-  fs.writeFileSync(config.paths.metaFile, JSON.stringify(data, null, 2));
+  writeJsonAtomically(config.paths.metaFile, data);
   cachedMeta = structuredClone(data);
 }
 
@@ -64,11 +67,14 @@ export function findMetaByType<T extends MetaEntry>(
   return entry && entry.type === type ? (entry as T) : undefined;
 }
 
-export function removeMeta(id: string): MetaEntry | null {
+export function removeMetaByType<T extends MetaEntry>(
+  id: string,
+  type: T['type'],
+): T | null {
   const meta = loadMeta();
-  const entry = meta.find((f) => f.id === id);
+  const entry = meta.find((item): item is T => item.id === id && item.type === type);
   if (!entry) return null;
-  saveMeta(meta.filter((f) => f.id !== id));
+  saveMeta(meta.filter((item) => item.id !== id));
   return entry;
 }
 
@@ -96,6 +102,8 @@ export function getItemsInFolder(folderId: string | null): MetaEntry[] {
 
 export function deleteFolderRecursive(id: string): MetaEntry[] {
   const meta = loadMeta();
+  const folder = meta.find((entry): entry is FolderEntry => entry.id === id && entry.type === 'folder');
+  if (!folder) return [];
   const childrenByParent = new Map<string | null, MetaEntry[]>();
   for (const entry of meta) {
     const key = entry.folderId || null;
@@ -106,6 +114,7 @@ export function deleteFolderRecursive(id: string): MetaEntry[] {
 
   const toDelete = new Set<string>();
   function collect(parentId: string) {
+    if (toDelete.has(parentId)) return;
     toDelete.add(parentId);
     for (const child of childrenByParent.get(parentId) ?? []) {
       if (child.type === 'folder') collect(child.id);

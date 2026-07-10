@@ -12,7 +12,7 @@
     "build": "npm run build:client && npm run build:editor",
     "dev:client": "esbuild public/js/theme.ts --bundle --outfile=public/js/theme.js --format=iife --target=es2022 && esbuild public/js/admin.ts public/js/viewer.ts --bundle --outdir=public/js --format=esm --target=es2022 --watch",
     "dev:editor": "npm --prefix editor-app run dev",
-    "test": "node --test test/*.test.js",
+    "test": "node --import tsx --test test/*.test.js",
     "typecheck": "tsc && tsc -p tsconfig.client.json",
     "verify:data": "node scripts/verify-data.mjs",
     "verify:data:http": "node scripts/verify-data.mjs --http"

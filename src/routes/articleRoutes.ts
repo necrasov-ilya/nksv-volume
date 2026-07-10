@@ -13,7 +13,7 @@ import {
   addMeta,
   findMetaByType,
   loadMeta,
-  removeMeta,
+  removeMetaByType,
   saveMeta,
 } from '../utils/metaStore.js';
 import {
@@ -25,11 +25,21 @@ import {
 import { asyncHandler } from '../utils/routeHelpers.js';
 import {
   findParentFolder,
+  validateArticleAnnotation,
+  validateArticleTags,
   validateArticleTitle,
 } from '../validation/meta.js';
 import type { ArticleContent, ArticleEntry, FileEntry } from '../types.js';
 
 const router = Router();
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isArticleContent(value: unknown): value is ArticleContent {
+  return isRecord(value) && Array.isArray(value.content);
+}
 
 router.get('/articles/assets/images', authMiddleware, (_req, res) => {
   const images = loadMeta()
@@ -44,6 +54,10 @@ router.get('/articles/assets/images', authMiddleware, (_req, res) => {
 });
 
 router.post(ARTICLES_ROUTE, authMiddleware, (req, res) => {
+  if (!isRecord(req.body)) {
+    return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+  }
+
   const {
     title = DEFAULT_ARTICLE_TITLE,
     folderId = null,
@@ -56,25 +70,38 @@ router.post(ARTICLES_ROUTE, authMiddleware, (req, res) => {
     tags?: string[];
   };
 
-  if (folderId && !findParentFolder(folderId)) {
+  const meta = loadMeta();
+  if (folderId && !findParentFolder(folderId, meta)) {
     return res.status(400).json({ error: ERROR_MESSAGES.folderNotFound });
   }
+
+  const titleResult = validateArticleTitle(title);
+  if (titleResult.error) return res.status(400).json({ error: titleResult.error });
+  const annotationResult = validateArticleAnnotation(annotation);
+  if (annotationResult.error) return res.status(400).json({ error: annotationResult.error });
+  const tagsResult = validateArticleTags(tags);
+  if (tagsResult.error) return res.status(400).json({ error: tagsResult.error });
 
   const now = new Date().toISOString();
   const entry: ArticleEntry = {
     id: nanoid(NANOID_ID_LENGTH),
     type: 'article',
-    title: title.trim() || DEFAULT_ARTICLE_TITLE,
-    annotation: annotation?.trim() || undefined,
-    tags: Array.isArray(tags) ? tags.filter((tag): tag is string => typeof tag === 'string') : undefined,
+    title: titleResult.value!,
+    annotation: annotationResult.value,
+    tags: tagsResult.value,
     status: ARTICLE_STATUS_DRAFT,
     folderId: folderId || null,
     createdAt: now,
     updatedAt: now,
   };
 
-  addMeta(entry);
   const content = createArticleContentFile(entry.id);
+  try {
+    addMeta(entry);
+  } catch (error) {
+    deleteArticleContent(entry.id);
+    throw error;
+  }
   res.status(201).json({ article: entry, content });
 });
 
@@ -93,8 +120,12 @@ router.put(
   `${ARTICLES_ROUTE}/:id`,
   authMiddleware,
   asyncHandler((req, res) => {
+    if (!isRecord(req.body)) {
+      return res.status(400).json({ error: ERROR_MESSAGES.invalidRequest });
+    }
+
     const meta = loadMeta();
-    const entry = findMetaByType<ArticleEntry>(req.params.id, 'article');
+    const entry = meta.find((item): item is ArticleEntry => item.id === req.params.id && item.type === 'article');
     if (!entry) return res.status(404).json({ error: ERROR_MESSAGES.articleNotFound });
 
     const body = req.body as {
@@ -107,6 +138,11 @@ router.put(
       content?: ArticleContent;
     };
 
+    const hasContent = Object.prototype.hasOwnProperty.call(body, 'content');
+    if (hasContent && !isArticleContent(body.content)) {
+      return res.status(400).json({ error: ERROR_MESSAGES.invalidArticleContent });
+    }
+
     if (Object.prototype.hasOwnProperty.call(body, 'title')) {
       const titleResult = validateArticleTitle(body.title);
       if (titleResult.error) return res.status(400).json({ error: titleResult.error });
@@ -114,11 +150,15 @@ router.put(
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'annotation')) {
-      entry.annotation = String(body.annotation ?? '').trim() || undefined;
+      const annotationResult = validateArticleAnnotation(body.annotation);
+      if (annotationResult.error) return res.status(400).json({ error: annotationResult.error });
+      entry.annotation = annotationResult.value;
     }
 
-    if (Object.prototype.hasOwnProperty.call(body, 'tags') && Array.isArray(body.tags)) {
-      entry.tags = body.tags.filter((tag): tag is string => typeof tag === 'string');
+    if (Object.prototype.hasOwnProperty.call(body, 'tags')) {
+      const tagsResult = validateArticleTags(body.tags);
+      if (tagsResult.error) return res.status(400).json({ error: tagsResult.error });
+      entry.tags = tagsResult.value;
     }
 
     if (Object.prototype.hasOwnProperty.call(body, 'coverImage')) {
@@ -140,11 +180,21 @@ router.put(
       entry.folderId = targetFolderId;
     }
 
-    if (body.content) saveArticleContent(entry.id, body.content);
-
     entry.updatedAt = new Date().toISOString();
-    saveMeta(meta);
-    res.json({ article: entry, content: loadArticleContent(entry.id) });
+    const previousContent = hasContent ? loadArticleContent(entry.id) : null;
+    if (hasContent) saveArticleContent(entry.id, body.content!);
+
+    try {
+      saveMeta(meta);
+    } catch (error) {
+      if (hasContent) {
+        if (previousContent) saveArticleContent(entry.id, previousContent);
+        else deleteArticleContent(entry.id);
+      }
+      throw error;
+    }
+
+    res.json({ article: entry, content: hasContent ? body.content : loadArticleContent(entry.id) });
   }),
 );
 
@@ -152,8 +202,8 @@ router.delete(
   `${ARTICLES_ROUTE}/:id`,
   authMiddleware,
   asyncHandler((req, res) => {
-    const entry = removeMeta(req.params.id);
-    if (!entry || entry.type !== 'article') {
+    const entry = removeMetaByType<ArticleEntry>(req.params.id, 'article');
+    if (!entry) {
       return res.status(404).json({ error: ERROR_MESSAGES.articleNotFound });
     }
     deleteArticleContent(entry.id);

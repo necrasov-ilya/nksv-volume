@@ -16,6 +16,8 @@ export const MAX_FOLDER_NAME_LENGTH = 120;
 export const MAX_FILE_NAME_LENGTH = 255;
 export const MAX_ARTICLE_TITLE_LENGTH = 200;
 export const MAX_TAG_COUNT = 10;
+export const MAX_TAG_LENGTH = 50;
+export const MAX_ANNOTATION_LENGTH = 500;
 
 export const MAX_JSON_BODY_SIZE_BYTES = 32 * 1024;
 
